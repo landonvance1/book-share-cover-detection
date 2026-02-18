@@ -1,0 +1,9 @@
+[project]
+name = "book-share-cover-detection"
+version = "0.1.0"
+description = "Book cover image analysis microservice using OCR and NLP"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
