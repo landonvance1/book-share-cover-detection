@@ -14,7 +14,7 @@ The parent project (BookSharingWebAPI) currently handles cover analysis inline u
 3. **OpenLibrary search** — searches `openlibrary.org/search.json?q={text}` and scores results by word overlap
 
 This microservice replaces that with:
-1. **EasyOCR** (local, no cloud dependency) for text extraction
+1. **Florence-2** (Microsoft, local vision-language model) for text extraction
 2. **SpaCy NLP** for intelligent title/author identification (replaces the height heuristic)
 3. **OpenLibrary search** with NLP-informed queries (same external API)
 
@@ -47,7 +47,7 @@ book-share-cover-detection (this repo, Python)
     │  OCR → NLP → OpenLibrary search
     │  Returns structured analysis result
     │
-    ├── EasyOCR (local OCR engine)
+    ├── Florence-2 (local vision-language model OCR)
     ├── SpaCy (local NLP engine)
     └── OpenLibrary API (external book search)
 ```
@@ -57,8 +57,8 @@ book-share-cover-detection (this repo, Python)
 Two core abstractions must be defined as interfaces/protocols:
 
 **OCR Interface** — Takes an image, returns extracted text with positional/confidence metadata.
-- Default implementation: EasyOCR
-- Future alternatives: Tesseract, PaddleOCR, cloud APIs
+- Default implementation: Florence-2 (`microsoft/Florence-2-base`)
+- Future alternatives: Florence-2 ONNX export (see issue #12), Tesseract, PaddleOCR, cloud APIs
 
 **NLP Interface** — Takes raw OCR output, returns structured analysis with confidence scores identifying which text is likely the title vs. author vs. noise.
 - Default implementation: SpaCy
@@ -152,10 +152,13 @@ The mobile app and API enforce these constraints before the image reaches this s
 
 ## Development Guidelines
 
+### Git Standards
+- **Commits and PRs**: Use conventional commit syntax: https://www.conventionalcommits.org/en/v1.0.0/
+
 ### Technology Choices
 
 - **Language**: Python 3.11+
-- **OCR**: EasyOCR (GPU-optional, supports 80+ languages)
+- **OCR**: Florence-2 (`microsoft/Florence-2-base`, 0.23B params, GPU-optional)
 - **NLP**: SpaCy (lightweight, fast, good NER out of the box)
 - **HTTP framework**: FastAPI recommended (async, automatic OpenAPI docs, similar developer experience to the .NET Minimal APIs pattern used in the parent project)
 - **OpenLibrary client**: httpx or aiohttp for async HTTP

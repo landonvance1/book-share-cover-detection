@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-from app.engines.easyocr_engine import EasyOcrEngine
+from app.engines.florence2_engine import Florence2OcrEngine
 from app.engines.spacy_engine import SpacyNlpEngine
 from app.models import CoverAnalysisResponse, HealthResponse
 from app.services.analyzer import CoverAnalyzer
@@ -17,7 +17,7 @@ analyzer: CoverAnalyzer | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global analyzer
-    ocr_engine = EasyOcrEngine()
+    ocr_engine = Florence2OcrEngine()
     nlp_engine = SpacyNlpEngine()
     book_search = OpenLibraryClient()
     analyzer = CoverAnalyzer(ocr_engine, nlp_engine, book_search)
