@@ -35,3 +35,6 @@ Thumbs.db
 
 # EasyOCR model cache
 ~/.EasyOCR/
+
+# ONNX model artifacts (download separately)
+florence2-onnx/

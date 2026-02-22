@@ -68,13 +68,31 @@ book-share-cover-detection (this service)
 
 Florence-2 (`microsoft/Florence-2-base`, 0.23B parameters) is a vision-language model that generates text end-to-end from the full image in a single pass, rather than running separate text detection and recognition stages. It passes 7/7 integration tests across a range of difficult cover types including embossed text, decorative fonts, and stylised display type.
 
+Two implementations are available:
+
+- **Florence-2 PyTorch** (`Florence2OcrEngine`) — default, downloads the model from HuggingFace on first use (~1 GB). Requires `trust_remote_code=True` for the model forward pass.
+- **Florence-2 ONNX** (`Florence2OnnxEngine`) — uses pre-exported ONNX models from `onnx-community/Florence-2-base-ft` (q4 quantized by default). Runs on ONNX Runtime without `trust_remote_code` for model computation (still needed for the tokenizer/post-processor). Expected 3-5x speedup on CPU.
+
+#### ONNX Engine Setup
+
+Download the pre-exported ONNX model:
+
+```bash
+pip install huggingface-hub
+huggingface-cli download onnx-community/Florence-2-base-ft --local-dir florence2-onnx
+```
+
+The `florence2-onnx/` directory is excluded from git via `.gitignore`. The download includes all quantization variants; the engine defaults to `q4`.
+
+Set ONNX_NUM_THREADS in .env file (unless defauly of 4 is sufficient)
+
 EasyOCR and DocTR were evaluated and discarded — each achieved 4/7 on a different subset of images and no preprocessing strategy improved either engine's pass rate. See `docs/decisions/001-ocr-engine-selection.md` for the full evaluation and `experiments/PREPROCESSING_FINDINGS.md` for preprocessing sweep results.
 
 ### Abstractions
 
 The OCR and NLP engines are both behind interfaces, making it straightforward to swap in alternatives:
 
-- **OCR**: Florence-2 PyTorch (default), Florence-2 ONNX (planned — see [issue #12](https://github.com/landonvance1/book-share-cover-detection/issues/12))
+- **OCR**: Florence-2 PyTorch (default), Florence-2 ONNX (see ONNX Engine Setup above)
 - **NLP**: SpaCy (default), Hugging Face transformers, custom models
 
 ## Getting Started
@@ -114,7 +132,13 @@ docker run -p 8000:8000 book-share-cover-detection
 # Unit tests (fast, no model download)
 pytest tests/unit/
 
-# Integration tests (downloads Florence-2 on first run, ~1 GB)
+# Integration tests — PyTorch engine (downloads Florence-2 on first run, ~1 GB)
+pytest tests/integration/ -v -k "florence2 and not onnx"
+
+# Integration tests — ONNX engine (requires model download, see ONNX Engine Setup)
+pytest tests/integration/ -v -k "onnx"
+
+# All integration tests
 pytest tests/integration/ -v
 ```
 
@@ -127,7 +151,8 @@ app/
 │   ├── ocr.py           # OCR abstract base class
 │   └── nlp.py           # NLP abstract base class
 ├── engines/
-│   ├── florence2_engine.py  # Florence-2 implementation
+│   ├── florence2_engine.py       # Florence-2 PyTorch implementation
+│   ├── florence2_onnx_engine.py  # Florence-2 ONNX implementation
 │   └── spacy_engine.py      # SpaCy implementation
 ├── services/
 │   ├── analyzer.py      # Orchestrates OCR → NLP → search
