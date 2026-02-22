@@ -15,5 +15,10 @@ class Settings(BaseSettings):
     # and significant slowdowns — see benchmark results in issue #12.
     onnx_num_threads: int = 4
 
+    # When true, logs per-stage timing for each ONNX inference call.
+    # Set ONNX_LOG_TIMING=true in the environment or .env to enable.
+    # Default is false to avoid overhead in production.
+    onnx_log_timing: bool = False
+
 
 settings = Settings()

@@ -62,8 +62,22 @@ def mock_onnx_deps():
         yield sessions, processor_instance
 
 
+def _configure_embed_run(sessions):
+    """Set embed_tokens.run side_effect to handle chunked weight extraction at init.
+
+    _extract_embedding_weights calls embed_tokens.run in chunks of 1024 tokens,
+    passing input_ids of shape (1, chunk_size). This helper makes the mock return
+    the correctly shaped zeros so __init__ completes without error.
+    """
+    def _embed_side_effect(_, input_dict):
+        seq_len = input_dict["input_ids"].shape[1]
+        return [np.zeros((1, seq_len, 768), dtype=np.float32)]
+    sessions["embed_tokens"].run.side_effect = _embed_side_effect
+
+
 def _build_engine(sessions, processor_instance):
     """Build engine with fresh mocks for ort and AutoProcessor."""
+    _configure_embed_run(sessions)
     with patch(f"{MODULE}.ort") as mock_ort, \
          patch(f"{MODULE}.AutoProcessor") as mock_proc_cls:
         mock_ort.SessionOptions.return_value = MagicMock()
@@ -82,10 +96,12 @@ class TestFlorence2OnnxEngineInit:
 
     def test_session_file_paths_use_quantization_suffix(self, mock_onnx_deps):
         _, proc = mock_onnx_deps
+        sessions = _make_sessions()
+        _configure_embed_run(sessions)
         with patch(f"{MODULE}.ort") as mock_ort, \
              patch(f"{MODULE}.AutoProcessor") as mock_proc_cls:
             mock_ort.SessionOptions.return_value = MagicMock()
-            mock_ort.InferenceSession.side_effect = list(_make_sessions().values())
+            mock_ort.InferenceSession.side_effect = list(sessions.values())
             mock_proc_cls.from_pretrained.return_value = proc
 
             from app.engines.florence2_onnx_engine import Florence2OnnxEngine
@@ -99,10 +115,12 @@ class TestFlorence2OnnxEngineInit:
 
     def test_no_quantization_suffix(self, mock_onnx_deps):
         _, proc = mock_onnx_deps
+        sessions = _make_sessions()
+        _configure_embed_run(sessions)
         with patch(f"{MODULE}.ort") as mock_ort, \
              patch(f"{MODULE}.AutoProcessor") as mock_proc_cls:
             mock_ort.SessionOptions.return_value = MagicMock()
-            mock_ort.InferenceSession.side_effect = list(_make_sessions().values())
+            mock_ort.InferenceSession.side_effect = list(sessions.values())
             mock_proc_cls.from_pretrained.return_value = proc
 
             from app.engines.florence2_onnx_engine import Florence2OnnxEngine
@@ -114,10 +132,12 @@ class TestFlorence2OnnxEngineInit:
 
     def test_processor_loaded_with_trust_remote_code(self, mock_onnx_deps):
         _, proc = mock_onnx_deps
+        sessions = _make_sessions()
+        _configure_embed_run(sessions)
         with patch(f"{MODULE}.ort") as mock_ort, \
              patch(f"{MODULE}.AutoProcessor") as mock_proc_cls:
             mock_ort.SessionOptions.return_value = MagicMock()
-            mock_ort.InferenceSession.side_effect = list(_make_sessions().values())
+            mock_ort.InferenceSession.side_effect = list(sessions.values())
             mock_proc_cls.from_pretrained.return_value = proc
 
             from app.engines.florence2_onnx_engine import Florence2OnnxEngine
@@ -134,10 +154,6 @@ class TestFlorence2OnnxEngineExtractText:
         sessions["vision_encoder"].run.return_value = [
             np.zeros((1, 577, 768), dtype=np.float32)
         ]
-        # Embed tokens returns embeddings
-        sessions["embed_tokens"].run.return_value = [
-            np.zeros((1, 1, 768), dtype=np.float32)
-        ]
         # Encoder returns hidden states
         sessions["encoder"].run.return_value = [
             np.zeros((1, 578, 768), dtype=np.float32)
@@ -148,9 +164,16 @@ class TestFlorence2OnnxEngineExtractText:
         kv_tensors = [np.zeros((1, 12, 1, 64), dtype=np.float32)] * (NUM_LAYERS * 4)
         sessions["decoder"].run.return_value = [decoder_logits] + kv_tensors
 
-        # Processor
+        # Processor: return correct shapes for pixel_values and input_ids.
+        # input_ids must be 2D (1, seq_len) so that input_ids[0] is a 1D
+        # index array suitable for numpy fancy indexing into _embedding_weights.
+        def _inputs_getitem(self_mock, key):
+            if key == "pixel_values":
+                return np.zeros((1, 3, 768, 768), dtype=np.float32)
+            return np.zeros((1, 9), dtype=np.int64)  # input_ids
+
         inputs_mock = MagicMock()
-        inputs_mock.__getitem__ = lambda self, key: np.zeros((1, 3, 768, 768))
+        inputs_mock.__getitem__ = _inputs_getitem
         processor_instance.return_value = inputs_mock
         processor_instance.batch_decode.return_value = ["<fake text>"]
         processor_instance.post_process_generation.return_value = {
@@ -212,17 +235,17 @@ def _make_sessions_with(real_sessions):
 
 class TestGreedyDecode:
     def _make_engine(self, sessions, processor_instance):
-        return _build_engine(
+        engine = _build_engine(
             _make_sessions_with(sessions), processor_instance
         )[0]
+        # _embedding_weights is already populated by __init__ (all zeros from mock).
+        # Explicitly set here to ensure a known state independent of mock details.
+        engine._embedding_weights = np.zeros((51289, 768), dtype=np.float32)
+        return engine
 
     def test_eos_terminates_loop(self, mock_onnx_deps):
         sessions, processor_instance = mock_onnx_deps
         engine = self._make_engine(sessions, processor_instance)
-
-        sessions["embed_tokens"].run.return_value = [
-            np.zeros((1, 1, 768), dtype=np.float32)
-        ]
 
         kv_tensors = [np.zeros((1, 12, 1, 64), dtype=np.float32)] * (NUM_LAYERS * 4)
 
@@ -250,10 +273,6 @@ class TestGreedyDecode:
         sessions, processor_instance = mock_onnx_deps
         engine = self._make_engine(sessions, processor_instance)
 
-        sessions["embed_tokens"].run.return_value = [
-            np.zeros((1, 1, 768), dtype=np.float32)
-        ]
-
         # Always return token 100 (never EOS)
         logits = np.zeros((1, 1, 51289), dtype=np.float32)
         logits[0, 0, 100] = 10.0
@@ -270,10 +289,6 @@ class TestGreedyDecode:
     def test_kv_cache_passed_correctly(self, mock_onnx_deps):
         sessions, processor_instance = mock_onnx_deps
         engine = self._make_engine(sessions, processor_instance)
-
-        sessions["embed_tokens"].run.return_value = [
-            np.zeros((1, 1, 768), dtype=np.float32)
-        ]
 
         kv_tensors = [np.ones((1, 12, 1, 64), dtype=np.float32) * 42] * (NUM_LAYERS * 4)
 
@@ -301,3 +316,35 @@ class TestGreedyDecode:
         assert "past_key_values.0.decoder.key" in feed_dict
         assert feed_dict["past_key_values.0.decoder.key"][0, 0, 0, 0] == 42.0
         assert feed_dict["use_cache_branch"][0] is np.bool_(True)
+
+    def test_embed_tokens_not_called_during_decode(self, mock_onnx_deps):
+        sessions, processor_instance = mock_onnx_deps
+        engine = self._make_engine(sessions, processor_instance)
+
+        # Capture call count after __init__ (chunked weight extraction already done)
+        init_call_count = sessions["embed_tokens"].run.call_count
+
+        kv_tensors = [np.zeros((1, 12, 1, 64), dtype=np.float32)] * (NUM_LAYERS * 4)
+        logits_eos = np.zeros((1, 1, 51289), dtype=np.float32)
+        logits_eos[0, 0, 2] = 10.0
+        sessions["decoder"].run.return_value = [logits_eos] + kv_tensors
+
+        encoder_hidden = np.zeros((1, 578, 768), dtype=np.float32)
+        attention_mask = np.ones((1, 578), dtype=np.int64)
+        engine._greedy_decode(encoder_hidden, attention_mask)
+
+        # embed_tokens.run must NOT be called during decode (numpy indexing is used instead)
+        assert sessions["embed_tokens"].run.call_count == init_call_count
+
+
+class TestFlorence2OnnxEngineInitEmbedding:
+    def test_embedding_weights_shape(self, mock_onnx_deps):
+        sessions, proc = mock_onnx_deps
+        engine, _ = _build_engine(_make_sessions_with(sessions), proc)
+        assert engine._embedding_weights.shape == (51289, 768)
+
+    def test_embed_tokens_called_at_init(self, mock_onnx_deps):
+        sessions, proc = mock_onnx_deps
+        _build_engine(_make_sessions_with(sessions), proc)
+        # Chunked extraction: ceil(51289 / 1024) = 51 chunks
+        assert sessions["embed_tokens"].run.call_count == 51
