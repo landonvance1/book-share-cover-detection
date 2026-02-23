@@ -67,12 +67,7 @@ def sample_ocr_result(sample_ocr_regions) -> OcrResult:
 
 @pytest.fixture
 def sample_nlp_analysis() -> NlpAnalysis:
-    return NlpAnalysis(
-        detected_title="The Great Gatsby",
-        title_confidence=0.92,
-        detected_author="F Scott Fitzgerald",
-        author_confidence=0.87,
-    )
+    return NlpAnalysis(potential_authors=["F Scott Fitzgerald"])
 
 
 @pytest.fixture

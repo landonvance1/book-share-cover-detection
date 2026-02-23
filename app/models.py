@@ -22,10 +22,7 @@ class OcrResult(CamelModel):
 
 
 class NlpAnalysis(CamelModel):
-    detected_title: str | None = None
-    title_confidence: float = 0.0
-    detected_author: str | None = None
-    author_confidence: float = 0.0
+    potential_authors: list[str] = []
 
 
 class BookMatch(CamelModel):

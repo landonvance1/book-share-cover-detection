@@ -18,10 +18,7 @@ def mock_analyzer():
                     extracted_text="The Great Gatsby",
                 ),
                 matched_books=[],
-                nlp_analysis=NlpAnalysis(
-                    detected_title="The Great Gatsby",
-                    title_confidence=0.92,
-                ),
+                nlp_analysis=NlpAnalysis(potential_authors=["F. Scott Fitzgerald"]),
             )
         )
         yield mock

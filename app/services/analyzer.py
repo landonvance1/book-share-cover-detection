@@ -36,12 +36,7 @@ class CoverAnalyzer:
                 ),
             )
 
-        query_parts = []
-        if nlp_analysis.detected_title:
-            query_parts.append(nlp_analysis.detected_title)
-        if nlp_analysis.detected_author:
-            query_parts.append(nlp_analysis.detected_author)
-        query = " ".join(query_parts) if query_parts else ocr_result.text
+        query = ocr_result.text
 
         try:
             raw_results = await self._search.search(query)
