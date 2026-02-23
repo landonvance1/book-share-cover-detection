@@ -1,6 +1,5 @@
 import pytest
 
-from app.interfaces.book_search import BookSearchClient
 from app.interfaces.nlp import NlpEngine
 from app.interfaces.ocr import OcrEngine
 
@@ -30,15 +29,3 @@ class TestNlpEngineABC:
         with pytest.raises(TypeError):
             IncompleteNlp()
 
-
-class TestBookSearchClientABC:
-    def test_cannot_instantiate(self):
-        with pytest.raises(TypeError):
-            BookSearchClient()
-
-    def test_subclass_must_implement_search(self):
-        class IncompleteSearch(BookSearchClient):
-            pass
-
-        with pytest.raises(TypeError):
-            IncompleteSearch()

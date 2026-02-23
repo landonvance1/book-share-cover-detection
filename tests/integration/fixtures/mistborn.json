@@ -1,28 +1,6 @@
 {
-  "text": "</s>#1 NEW YORK TIMES BESTSELLINE AUTHOR BRANDON SANDERSON MISTBORN",
+  "text": "BRANDON SANDERSON MISTBORN",
   "regions": [
-    {
-      "text": "</s>#1 NEW YORK TIMES BESTSELLINE AUTHOR",
-      "confidence": 1.0,
-      "coordinates": [
-        [
-          369.6000061035156,
-          437.25
-        ],
-        [
-          1586.8800048828125,
-          358.04998779296875
-        ],
-        [
-          1590.719970703125,
-          447.1499938964844
-        ],
-        [
-          371.5199890136719,
-          526.3499755859375
-        ]
-      ]
-    },
     {
       "text": "BRANDON",
       "confidence": 1.0,

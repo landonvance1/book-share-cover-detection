@@ -1,9 +1,8 @@
 import pytest
 
-from app.interfaces.book_search import BookSearchClient
 from app.interfaces.nlp import NlpEngine
 from app.interfaces.ocr import OcrEngine
-from app.models import BookMatch, NlpAnalysis, OcrBoundingBox, OcrResult
+from app.models import NlpAnalysis, OcrBoundingBox, OcrResult
 
 
 class MockOcrEngine(OcrEngine):
@@ -28,18 +27,6 @@ class MockNlpEngine(NlpEngine):
             raise self._error
         assert self._result is not None
         return self._result
-
-
-class MockBookSearchClient(BookSearchClient):
-    def __init__(self, results: list[BookMatch] | None = None, error: Exception | None = None):
-        self._results = results or []
-        self._error = error
-
-    async def search(self, query: str, limit: int = 11) -> list[BookMatch]:
-        if self._error:
-            raise self._error
-        return self._results
-
 
 @pytest.fixture
 def sample_ocr_regions() -> list[OcrBoundingBox]:
@@ -69,20 +56,3 @@ def sample_ocr_result(sample_ocr_regions) -> OcrResult:
 def sample_nlp_analysis() -> NlpAnalysis:
     return NlpAnalysis(potential_authors=["F Scott Fitzgerald"])
 
-
-@pytest.fixture
-def sample_book_matches() -> list[BookMatch]:
-    return [
-        BookMatch(
-            title="The Great Gatsby",
-            author="F. Scott Fitzgerald",
-            isbn="9780743273565",
-            thumbnail_url="https://covers.openlibrary.org/b/id/12345-M.jpg",
-        ),
-        BookMatch(
-            title="Gatsby: A Novel",
-            author="F. Scott Fitzgerald",
-            isbn="9780000000001",
-            thumbnail_url=None,
-        ),
-    ]

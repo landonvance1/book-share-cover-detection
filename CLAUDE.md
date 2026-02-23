@@ -4,19 +4,17 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Project Overview
 
-**book-share-cover-detection** is a Python microservice that analyzes book cover images to identify the book's title and author, then searches OpenLibrary to return the most likely match. It replaces the Azure Computer Vision dependency currently embedded in the [book-share-api](https://github.com/landonvance1/book-share-api) (.NET backend).
+**book-share-cover-detection** is a Python microservice that analyzes book cover images to identify the book's title and author. It replaces the Azure Computer Vision dependency currently embedded in the [book-share-api](https://github.com/landonvance1/book-share-api) (.NET backend).
 
 ### Why This Exists
 
 The parent project (BookSharingWebAPI) currently handles cover analysis inline using:
 1. **Azure Vision OCR** — sends image to Azure's cloud Read API, polls for results, gets text + bounding boxes
 2. **Height-based filtering** — uses bounding box geometry to keep only visually prominent text (≥20% of max text size), with a "sharpening" retry strategy that drops smaller text tiers when OpenLibrary returns no matches
-3. **OpenLibrary search** — searches `openlibrary.org/search.json?q={text}` and scores results by word overlap
 
 This microservice replaces that with:
 1. **Florence-2** (Microsoft, local vision-language model) for text extraction
 2. **GLiNER** (zero-shot NER) for author name identification (replaces the height heuristic)
-3. **OpenLibrary search** with NLP-informed queries (same external API)
 
 ### Design Goals
 
@@ -44,12 +42,11 @@ book-share-api (.NET 8, Minimal APIs)
     ▼
 book-share-cover-detection (this repo, Python)
     │  Receives image
-    │  OCR → NLP → OpenLibrary search
+    │  OCR → NLP
     │  Returns structured analysis result
     │
     ├── Florence-2 (local vision-language model OCR)
     ├── SpaCy (local NLP engine)
-    └── OpenLibrary API (external book search)
 ```
 
 ### Interface Abstractions
@@ -73,50 +70,82 @@ The .NET API currently expects this shape from cover analysis (adapt to match):
   "analysis": {
     "isSuccess": true,
     "errorMessage": null,
-    "extractedText": "The Great Gatsby F Scott Fitzgerald"
   },
-  "matchedBooks": [
-    {
-      "title": "The Great Gatsby",
-      "author": "F. Scott Fitzgerald",
-      "isbn": "9780743273565",
-      "thumbnailUrl": "https://covers.openlibrary.org/b/id/12345-M.jpg"
-    }
-  ],
-  "exactMatch": null,
   "nlpAnalysis": {
-    "detectedTitle": "The Great Gatsby",
-    "titleConfidence": 0.92,
-    "detectedAuthor": "F Scott Fitzgerald",
-    "authorConfidence": 0.87
-  }
+    "potential_authors": ["F Scott Fitzgerald"]
+  },
+  "ocrResult": {
+    "text": "BRANDON SANDERSON MISTBORN",
+    "regions": [
+      {
+        "text": "BRANDON",
+        "confidence": 1.0,
+        "coordinates": [
+          [
+            442.55999755859375,
+            546.1499633789062
+          ],
+          [
+            1490.8800048828125,
+            523.0499877929688
+          ],
+          [
+            1492.7999267578125,
+            948.75
+          ],
+          [
+            446.3999938964844,
+            965.25
+          ]
+        ]
+      },
+      {
+        "text": "SANDERSON",
+        "confidence": 1.0,
+        "coordinates": [
+          [
+            246.72000122070312,
+            975.1499633789062
+          ],
+          [
+            1730.8800048828125,
+            958.6499633789062
+          ],
+          [
+            1732.7999267578125,
+            1440.449951171875
+          ],
+          [
+            248.63999938964844,
+            1456.949951171875
+          ]
+        ]
+      },
+      {
+        "text": "MISTBORN",
+        "confidence": 1.0,
+        "coordinates": [
+          [
+            331.1999816894531,
+            2529.449951171875
+          ],
+          [
+            1684.7999267578125,
+            2506.349853515625
+          ],
+          [
+            1686.719970703125,
+            3024.449951171875
+          ],
+          [
+            333.1199951171875,
+            3057.449951171875
+          ]
+        ]
+      }
+  ]}
 }
 ```
-
-Key additions over the current .NET response:
-- `nlpAnalysis` — structured NLP output with confidence scores (new capability)
-- `matchedBooks` uses `BookLookupResult`-style objects (title, author, isbn, thumbnailUrl) rather than full DB entities
-- The .NET API will handle merging with its local database — this service only returns OpenLibrary results
-
-### OpenLibrary API Details
-
-The search endpoint used by the current system:
-- **URL**: `https://openlibrary.org/search.json?q={query}&limit=11`
-- **User-Agent header required**: `Community Bookshare App (landonpvance@gmail.com)`
-- Cover thumbnails: `https://covers.openlibrary.org/b/id/{coverId}-M.jpg`
-- ISBN lookup: `https://openlibrary.org/isbn/{isbn}.json`
-- Rate limits: Be respectful, no official limit but avoid hammering
-
-### Current Scoring Algorithm (for reference)
-
-The .NET API scores OpenLibrary results like this — the new service should aim to improve on it:
-1. Build a set of OCR words (lowercased, punctuation stripped, length > 2)
-2. For each OpenLibrary result, count how many of its title+author words appear in the OCR set
-3. Score = matchCount / bookWordCount
-4. Filter: keep results with score ≥ 0.5
-5. Sort by score descending
-
-The NLP analysis should enable smarter searching (e.g., search title and author separately rather than dumping all OCR text into one query).
 
 ## Parent Project Context
 
@@ -159,9 +188,8 @@ The mobile app and API enforce these constraints before the image reaches this s
 
 - **Language**: Python 3.11+
 - **OCR**: Florence-2 (`microsoft/Florence-2-base`, 0.23B params, GPU-optional)
-- **NLP**: SpaCy (lightweight, fast, good NER out of the box)
+- **NLP**: GLiNER
 - **HTTP framework**: FastAPI recommended (async, automatic OpenAPI docs, similar developer experience to the .NET Minimal APIs pattern used in the parent project)
-- **OpenLibrary client**: httpx or aiohttp for async HTTP
 
 ### Key Design Principles
 
@@ -174,7 +202,6 @@ The mobile app and API enforce these constraints before the image reaches this s
 ### Testing Strategy
 
 - Unit tests for OCR output parsing and NLP analysis logic (mock the OCR/NLP engines)
-- Unit tests for OpenLibrary search and scoring
 - Integration tests with real images (keep a small set of test book cover images in the repo)
 - pytest as the test framework
 

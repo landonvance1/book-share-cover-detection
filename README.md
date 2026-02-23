@@ -1,6 +1,6 @@
 # book-share-cover-detection
 
-A Python microservice that analyzes book cover images to identify the title and author, then searches OpenLibrary to return the most likely book match.
+A Python microservice that analyzes book cover images to identify the title and author
 
 ## Overview
 
@@ -8,8 +8,7 @@ When a user photographs a book cover in the BookSharing mobile app, this service
 
 1. Runs **Florence-2** locally to extract text from the image
 2. Uses **GLiNER** (zero-shot NER) to identify which text is the author name
-3. Queries the **OpenLibrary API** with NLP-informed search terms
-4. Returns scored, structured book matches
+4. Returns likely author and title information
 
 This replaces Azure Vision OCR + height-based heuristics with a fully local, cost-free pipeline.
 
@@ -26,23 +25,80 @@ Accepts a multipart image upload (JPEG, PNG, or WebP, max 4 MB) and returns stru
   "analysis": {
     "isSuccess": true,
     "errorMessage": null,
-    "extractedText": "The Great Gatsby F Scott Fitzgerald"
   },
-  "matchedBooks": [
-    {
-      "title": "The Great Gatsby",
-      "author": "F. Scott Fitzgerald",
-      "isbn": "9780743273565",
-      "thumbnailUrl": "https://covers.openlibrary.org/b/id/12345-M.jpg"
-    }
-  ],
-  "exactMatch": null,
   "nlpAnalysis": {
-    "detectedTitle": "The Great Gatsby",
-    "titleConfidence": 0.92,
-    "detectedAuthor": "F Scott Fitzgerald",
-    "authorConfidence": 0.87
-  }
+    "potential_authors": ["F Scott Fitzgerald"]
+  },
+  "ocrResult": {
+    "text": "BRANDON SANDERSON MISTBORN",
+    "regions": [
+      {
+        "text": "BRANDON",
+        "confidence": 1.0,
+        "coordinates": [
+          [
+            442.55999755859375,
+            546.1499633789062
+          ],
+          [
+            1490.8800048828125,
+            523.0499877929688
+          ],
+          [
+            1492.7999267578125,
+            948.75
+          ],
+          [
+            446.3999938964844,
+            965.25
+          ]
+        ]
+      },
+      {
+        "text": "SANDERSON",
+        "confidence": 1.0,
+        "coordinates": [
+          [
+            246.72000122070312,
+            975.1499633789062
+          ],
+          [
+            1730.8800048828125,
+            958.6499633789062
+          ],
+          [
+            1732.7999267578125,
+            1440.449951171875
+          ],
+          [
+            248.63999938964844,
+            1456.949951171875
+          ]
+        ]
+      },
+      {
+        "text": "MISTBORN",
+        "confidence": 1.0,
+        "coordinates": [
+          [
+            331.1999816894531,
+            2529.449951171875
+          ],
+          [
+            1684.7999267578125,
+            2506.349853515625
+          ],
+          [
+            1686.719970703125,
+            3024.449951171875
+          ],
+          [
+            333.1199951171875,
+            3057.449951171875
+          ]
+        ]
+      }
+  ]}
 }
 ```
 
@@ -61,7 +117,6 @@ book-share-cover-detection (this service)
     │
     ├── Florence-2    — local vision-language model OCR (no cloud dependency)
     ├── GLiNER        — zero-shot NER for author name extraction
-    └── OpenLibrary   — external book search (openlibrary.org)
 ```
 
 ### OCR Engine
@@ -164,7 +219,6 @@ app/
 │   └── spacy_engine.py      # SpaCy implementation (unused stub)
 ├── services/
 │   ├── analyzer.py      # Orchestrates OCR → NLP → search
-│   └── openlibrary.py   # OpenLibrary API client
 docs/
 └── decisions/           # Architecture Decision Records
     └── 001-ocr-engine-selection.md
