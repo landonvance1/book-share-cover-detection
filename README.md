@@ -27,7 +27,8 @@ Accepts a multipart image upload (JPEG, PNG, or WebP, max 4 MB) and returns stru
     "errorMessage": null,
   },
   "nlpAnalysis": {
-    "potential_authors": ["F Scott Fitzgerald"]
+    "potentialAuthors": ["F Scott Fitzgerald"],
+    "potentialTitles": ["The Great Gatsby"]
   },
   "ocrResult": {
     "text": "BRANDON SANDERSON MISTBORN",

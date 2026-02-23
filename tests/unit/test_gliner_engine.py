@@ -105,3 +105,68 @@ async def test_ignores_non_author_entities(mock_gliner_module):
 
     assert result.potential_authors == ["Brandon Sanderson"]
     assert "Mistborn" not in result.potential_authors
+
+
+async def test_extracts_single_title(mock_gliner_module):
+    mock_gliner_module.from_pretrained.return_value.predict_entities.return_value = [
+        {"text": "Mistborn", "label": "book title", "score": 0.92},
+        {"text": "Brandon Sanderson", "label": "author", "score": 0.95},
+    ]
+
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    result = await engine.analyze(_make_ocr("Brandon Sanderson Mistborn"))
+
+    assert result.potential_titles == ["Mistborn"]
+    assert "Brandon Sanderson" not in result.potential_titles
+
+
+async def test_deduplicates_titles_case_insensitive(mock_gliner_module):
+    mock_gliner_module.from_pretrained.return_value.predict_entities.return_value = [
+        {"text": "Mistborn", "label": "book title", "score": 0.92},
+        {"text": "MISTBORN", "label": "book title", "score": 0.80},
+    ]
+
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    result = await engine.analyze(_make_ocr("Mistborn"))
+
+    assert len(result.potential_titles) == 1
+    assert result.potential_titles[0] == "Mistborn"
+
+
+async def test_titles_not_contaminated_by_author_entities(mock_gliner_module):
+    mock_gliner_module.from_pretrained.return_value.predict_entities.return_value = [
+        {"text": "Brandon Sanderson", "label": "author", "score": 0.95},
+        {"text": "Mistborn", "label": "book title", "score": 0.92},
+    ]
+
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    result = await engine.analyze(_make_ocr("Brandon Sanderson Mistborn"))
+
+    assert "Brandon Sanderson" not in result.potential_titles
+    assert "Mistborn" not in result.potential_authors
+
+
+async def test_authors_not_contaminated_by_title_entities(mock_gliner_module):
+    mock_gliner_module.from_pretrained.return_value.predict_entities.return_value = [
+        {"text": "Mistborn", "label": "book title", "score": 0.92},
+        {"text": "Brandon Sanderson", "label": "author", "score": 0.95},
+    ]
+
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    result = await engine.analyze(_make_ocr("Brandon Sanderson Mistborn"))
+
+    assert "Mistborn" not in result.potential_authors
+    assert result.potential_authors == ["Brandon Sanderson"]
+
+
+async def test_empty_text_returns_empty_titles(mock_gliner_module):
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    result = await engine.analyze(_make_ocr("   "))
+
+    assert result.potential_titles == []
+    mock_gliner_module.from_pretrained.return_value.predict_entities.assert_not_called()

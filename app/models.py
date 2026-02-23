@@ -23,6 +23,7 @@ class OcrResult(CamelModel):
 
 class NlpAnalysis(CamelModel):
     potential_authors: list[str] = []
+    potential_titles: list[str] = []
 
 
 class BookMatch(CamelModel):

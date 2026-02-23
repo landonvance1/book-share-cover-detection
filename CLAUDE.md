@@ -72,7 +72,8 @@ The .NET API currently expects this shape from cover analysis (adapt to match):
     "errorMessage": null,
   },
   "nlpAnalysis": {
-    "potential_authors": ["F Scott Fitzgerald"]
+    "potentialAuthors": ["F Scott Fitzgerald"],
+    "potentialTitles": ["The Great Gatsby"]
   },
   "ocrResult": {
     "text": "BRANDON SANDERSON MISTBORN",
