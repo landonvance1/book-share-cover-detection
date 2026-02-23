@@ -3,11 +3,24 @@ import types
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.models import OcrResult
+from app.models import OcrBoundingBox, OcrResult
 
 
 def _make_ocr(text: str) -> OcrResult:
     return OcrResult(text=text, regions=[])
+
+
+def _make_ocr_with_regions(regions: list[tuple[str, float]]) -> OcrResult:
+    """regions = [(text, height_px), ...]; builds minimal quad coordinates."""
+    boxes = []
+    for text, h in regions:
+        boxes.append(OcrBoundingBox(
+            text=text,
+            confidence=1.0,
+            coordinates=[[0, 0], [100, 0], [100, h], [0, h]],
+        ))
+    full_text = " ".join(t for t, _ in regions)
+    return OcrResult(text=full_text, regions=boxes)
 
 
 @pytest.fixture(autouse=True)
@@ -170,3 +183,28 @@ async def test_empty_text_returns_empty_titles(mock_gliner_module):
 
     assert result.potential_titles == []
     mock_gliner_module.from_pretrained.return_value.predict_entities.assert_not_called()
+
+
+async def test_authors_sorted_by_height_descending(mock_gliner_module):
+    # "Fonda Lee" region is shorter than "Brandon Sanderson" — Sanderson should sort first
+    mock_gliner_module.from_pretrained.return_value.predict_entities.return_value = [
+        {"text": "Fonda Lee", "label": "author", "score": 0.90, "start": 0, "end": 9},
+        {"text": "Brandon Sanderson", "label": "author", "score": 0.85, "start": 10, "end": 27},
+    ]
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    ocr = _make_ocr_with_regions([("Fonda Lee", 50), ("Brandon Sanderson", 200)])
+    result = await engine.analyze(ocr)
+    assert result.potential_authors == ["Brandon Sanderson", "Fonda Lee"]
+
+
+async def test_titles_sorted_by_height_descending(mock_gliner_module):
+    mock_gliner_module.from_pretrained.return_value.predict_entities.return_value = [
+        {"text": "A Wizard Of Earthsea", "label": "book title", "score": 0.88, "start": 0, "end": 20},
+        {"text": "Mistborn", "label": "book title", "score": 0.92, "start": 21, "end": 29},
+    ]
+    from app.engines.gliner_engine import GlinerNlpEngine
+    engine = GlinerNlpEngine()
+    ocr = _make_ocr_with_regions([("A Wizard Of Earthsea", 80), ("Mistborn", 300)])
+    result = await engine.analyze(ocr)
+    assert result.potential_titles == ["Mistborn", "A Wizard Of Earthsea"]

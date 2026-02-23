@@ -14,12 +14,12 @@ The parent project (BookSharingWebAPI) currently handles cover analysis inline u
 
 This microservice replaces that with:
 1. **Florence-2** (Microsoft, local vision-language model) for text extraction
-2. **GLiNER** (zero-shot NER) for author name identification (replaces the height heuristic)
+2. **GLiNER** (zero-shot NER) to classify text as author or title; results are sorted by bounding box height so the most visually prominent match appears first
 
 ### Design Goals
 
 - **Eliminate Azure dependency** — no cloud OCR costs, no API keys needed for core functionality
-- **Better accuracy** — NLP-based title/author detection should outperform height-based heuristics
+- **Better accuracy** — NLP-based title/author detection combined with height-sorted results should outperform height-based filtering heuristics
 - **Separation of concerns** — isolate the compute-heavy OCR/NLP pipeline from the lightweight .NET API
 - **Independent scaling** — the OCR/NLP workload can scale separately from the API
 - **Abstraction** — OCR and NLP implementations behind interfaces so alternatives (Tesseract, Hugging Face, etc.) can be swapped in
@@ -57,7 +57,7 @@ Two core abstractions must be defined as interfaces/protocols:
 - Default implementation: Florence-2 (`microsoft/Florence-2-base`)
 - Future alternatives: Florence-2 ONNX export (see issue #12), Tesseract, PaddleOCR, cloud APIs
 
-**NLP Interface** — Takes raw OCR output, returns structured analysis with confidence scores identifying which text is likely the title vs. author vs. noise.
+**NLP Interface** — Takes raw OCR output, returns structured analysis identifying which text is likely the title vs. author. Results are ordered by bounding box height (most visually prominent first).
 - Default implementation: GLiNER (`urchade/gliner_small-v2.1`)
 - Future alternatives: Hugging Face transformers, custom models
 
@@ -195,7 +195,7 @@ The mobile app and API enforce these constraints before the image reaches this s
 ### Key Design Principles
 
 1. **Interface-first design** — Define OCR and NLP as abstract base classes/protocols before implementing. This is a core requirement, not optional.
-2. **Confidence scoring** — The NLP layer should output confidence scores for title and author detection. This is a key improvement over the current height-based heuristic.
+2. **Height-sorted results** — The NLP layer sorts `potentialAuthors` and `potentialTitles` by the bounding box height of their constituent OCR regions, so the most visually prominent match is always at index 0. This replaces the old height-based filtering heuristic.
 3. **Stateless** — This service has no database. It receives an image, processes it, and returns results.
 4. **Container-ready** — Should run in Docker alongside the .NET API and PostgreSQL. The .NET project uses Docker Compose already.
 5. **Health check endpoint** — Include a `/health` endpoint for container orchestration.

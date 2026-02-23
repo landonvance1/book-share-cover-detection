@@ -10,7 +10,7 @@ When a user photographs a book cover in the BookSharing mobile app, this service
 2. Uses **GLiNER** (zero-shot NER) to identify which text is the author name
 4. Returns likely author and title information
 
-This replaces Azure Vision OCR + height-based heuristics with a fully local, cost-free pipeline.
+This replaces Azure Vision OCR + height-based filtering heuristics with a fully local, cost-free pipeline. Results are sorted by bounding box height so the most visually prominent match appears first.
 
 ## API
 
@@ -146,7 +146,9 @@ EasyOCR and DocTR were evaluated and discarded — each achieved 4/7 on a differ
 
 ### NLP Engine
 
-GLiNER (`urchade/gliner_small-v2.1`, 166M parameters) is a zero-shot NER model that uses a custom label `"author"` to score all possible text spans in a single forward pass. Unlike SpaCy or BERT-based NER, it does not require sentence-level context — it works directly on isolated OCR text like `"BRANDON SANDERSON MISTBORN"`.
+GLiNER (`urchade/gliner_small-v2.1`, 166M parameters) is a zero-shot NER model that uses custom labels `"author"` and `"book title"` to score all possible text spans in a single forward pass. Unlike SpaCy or BERT-based NER, it does not require sentence-level context — it works directly on isolated OCR text like `"BRANDON SANDERSON MISTBORN"`.
+
+Results are sorted by bounding box height (derived from Florence-2 region coordinates), so the most visually prominent author and title appear at index 0. All OCR regions are passed to the model — no text is discarded before inference.
 
 The model (~330 MB) downloads automatically from HuggingFace on first use and is cached locally. CPU inference takes approximately 15 seconds per image, which is acceptable for this on-demand workload.
 
