@@ -6,25 +6,45 @@ from app.interfaces.nlp import NlpEngine
 from app.models import NlpAnalysis, OcrResult
 
 
-_HEIGHT_THRESHOLD = 0.2  # keep regions >= 20% of the tallest region's height
+def _region_height(region) -> float:
+    ys = [c[1] for c in region.coordinates]
+    return max(ys) - min(ys)
 
 
-def _filter_text_by_height(ocr_result: OcrResult) -> str:
-    """Return only text from regions whose height is >= _HEIGHT_THRESHOLD * max height.
+def _regions_with_heights(
+    ocr_result: OcrResult,
+) -> list[tuple[str, float]]:
+    """Return (text, height) for every OCR region."""
+    return [(r.text, _region_height(r)) for r in ocr_result.regions]
 
-    Falls back to the full OCR text string when no region coordinates are available.
+
+def _build_text_with_spans(
+    regions: list[tuple[str, float]],
+) -> tuple[str, list[tuple[int, int, float]]]:
     """
-    if not ocr_result.regions:
-        return ocr_result.text
+    Returns (concatenated_text, [(char_start, char_end, height), ...]).
+    Spans let us map a GLiNER entity's character positions back to region heights.
+    """
+    parts: list[str] = []
+    spans: list[tuple[int, int, float]] = []
+    pos = 0
+    for text, height in regions:
+        start = pos
+        end = pos + len(text)
+        parts.append(text)
+        spans.append((start, end, height))
+        pos = end + 1  # +1 for the space separator
+    return " ".join(parts), spans
 
-    heights = [
-        max(c[1] for c in r.coordinates) - min(c[1] for c in r.coordinates)
-        for r in ocr_result.regions
-    ]
-    cutoff = max(heights) * _HEIGHT_THRESHOLD
-    return " ".join(
-        r.text for r, h in zip(ocr_result.regions, heights) if h >= cutoff
-    )
+
+def _entity_height(
+    entity: dict,
+    spans: list[tuple[int, int, float]],
+) -> float:
+    """Max height of OCR regions that overlap the entity's character span."""
+    e_start, e_end = entity.get("start", 0), entity.get("end", 0)
+    matching = [h for (s, e, h) in spans if s < e_end and e > e_start]
+    return max(matching) if matching else 0.0
 
 
 class GlinerNlpEngine(NlpEngine):
@@ -37,28 +57,45 @@ class GlinerNlpEngine(NlpEngine):
         self._threshold = threshold
 
     async def analyze(self, ocr_result: OcrResult) -> NlpAnalysis:
-        text = _filter_text_by_height(ocr_result)
-        if not text.strip():
+        regions = _regions_with_heights(ocr_result)
+        if regions:
+            raw_text, spans = _build_text_with_spans(regions)
+        else:
+            raw_text = ocr_result.text
+            spans = []
+
+        if not raw_text.strip():
             return NlpAnalysis(potential_authors=[], potential_titles=[])
 
-        normalized = text.title() if text == text.upper() else text
+        normalized = raw_text.title() if raw_text == raw_text.upper() else raw_text
 
         loop = asyncio.get_event_loop()
         entities = await loop.run_in_executor(
-            None, lambda: self._model.predict_entities(normalized, ["author", "book title"], threshold=self._threshold)
+            None,
+            lambda: self._model.predict_entities(
+                normalized, ["author", "book title"], threshold=self._threshold
+            ),
         )
 
-        authors, seen_authors = [], set()
-        titles, seen_titles = [], set()
+        authors: list[tuple[str, float]] = []
+        titles: list[tuple[str, float]] = []
+        seen_authors: set[str] = set()
+        seen_titles: set[str] = set()
+
         for entity in entities:
             name = entity["text"].strip()
-            if entity["label"] == "author":
-                if name.lower() not in seen_authors:
-                    seen_authors.add(name.lower())
-                    authors.append(name)
-            elif entity["label"] == "book title":
-                if name.lower() not in seen_titles:
-                    seen_titles.add(name.lower())
-                    titles.append(name)
+            height = _entity_height(entity, spans)
+            if entity["label"] == "author" and name.lower() not in seen_authors:
+                seen_authors.add(name.lower())
+                authors.append((name, height))
+            elif entity["label"] == "book title" and name.lower() not in seen_titles:
+                seen_titles.add(name.lower())
+                titles.append((name, height))
 
-        return NlpAnalysis(potential_authors=authors, potential_titles=titles)
+        authors.sort(key=lambda x: x[1], reverse=True)
+        titles.sort(key=lambda x: x[1], reverse=True)
+
+        return NlpAnalysis(
+            potential_authors=[a for a, _ in authors],
+            potential_titles=[t for t, _ in titles],
+        )
