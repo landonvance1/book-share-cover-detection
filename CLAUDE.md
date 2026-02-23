@@ -15,7 +15,7 @@ The parent project (BookSharingWebAPI) currently handles cover analysis inline u
 
 This microservice replaces that with:
 1. **Florence-2** (Microsoft, local vision-language model) for text extraction
-2. **SpaCy NLP** for intelligent title/author identification (replaces the height heuristic)
+2. **GLiNER** (zero-shot NER) for author name identification (replaces the height heuristic)
 3. **OpenLibrary search** with NLP-informed queries (same external API)
 
 ### Design Goals
@@ -61,7 +61,7 @@ Two core abstractions must be defined as interfaces/protocols:
 - Future alternatives: Florence-2 ONNX export (see issue #12), Tesseract, PaddleOCR, cloud APIs
 
 **NLP Interface** — Takes raw OCR output, returns structured analysis with confidence scores identifying which text is likely the title vs. author vs. noise.
-- Default implementation: SpaCy
+- Default implementation: GLiNER (`urchade/gliner_small-v2.1`)
 - Future alternatives: Hugging Face transformers, custom models
 
 ### Expected Response Contract

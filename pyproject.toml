@@ -7,3 +7,15 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+filterwarnings = [
+    # onnxruntime SWIG types missing __module__ (Python 3.12 check, not actionable)
+    "ignore::DeprecationWarning:importlib._bootstrap",
+    # GLiNER contains an unescaped \d regex pattern in compiled/unknown source
+    "ignore:invalid escape sequence:SyntaxWarning",
+    # torch.jit.script deprecation inside GLiNER model loading
+    "ignore:.*torch.jit.script.*deprecated:DeprecationWarning:torch",
+    # huggingface_hub resume_download deprecation during model download
+    "ignore:.*resume_download.*deprecated:FutureWarning:huggingface_hub",
+    # sentencepiece fast-tokenizer byte-fallback notice during GLiNER tokenizer init
+    "ignore:The sentencepiece tokenizer:UserWarning:transformers",
+]

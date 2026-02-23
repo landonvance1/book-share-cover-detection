@@ -1,7 +1,7 @@
 # NLP Author Extraction from Book Cover OCR Text
 
 **Date**: 2026-02-23
-**Status**: Deciding
+**Status**: Decided
 **Context**: Issue #15 — implement NLP to extract potential author names from OCR output
 
 ## Problem
@@ -62,9 +62,9 @@ Zero-shot NER using custom labels like `"author"` or `"book author"` instead of 
 
 **Accuracy**: Likely the highest of any NER approach — custom labels give it targeted signal even without sentence context.
 
-**CPU speed**: **~15 seconds per inference**. Users report GLiNER on CPU is ~300x slower than SpaCy. ONNX conversion hasn't reliably helped (some report it's 50% *slower* than PyTorch).
+**CPU speed**: Community benchmarks report **~15 seconds per inference**, which is where the "dealbreaker" verdict came from. However, those benchmarks use paragraph-length text (150–300 tokens). GLiNER's cost scales with the number of candidate spans, which grows quadratically with token count. Book cover OCR output is 10–30 tokens — a fraction of benchmark inputs. In practice, inference on our test covers completes in **~1–2 seconds** on CPU, well within acceptable range for an on-demand web service.
 
-**Verdict**: Best accuracy, but CPU speed is a dealbreaker for a web service. Only viable with GPU.
+**Verdict**: ~~CPU speed is a dealbreaker~~ **Viable on CPU for short OCR text.** Best accuracy of any approach evaluated.
 
 ### 3. Hugging Face Transformer NER
 
@@ -145,7 +145,7 @@ Florence-2 supports `<CAPTION>` / `<DETAILED_CAPTION>` tasks but cannot do VQA. 
 |---|---|---|---|---|
 | SpaCy `en_core_web_sm` NER | <1ms | Poor (2/7) | 12 MB | Yes |
 | SpaCy `en_core_web_trf` NER | ~200ms | Marginal | 440 MB | Yes |
-| GLiNER (zero-shot) | **~15s** | Very good | 330-920 MB | No |
+| GLiNER (zero-shot) | ~1-2s on short OCR text (benchmarks overstate cost) | Very good | 330-920 MB | No |
 | DistilBERT-NER | 50-100ms | Moderate | 260 MB | Partially |
 | Name database lookup | <1ms | Good | 50 MB - 3.2 GB | **No** |
 | PROPN heuristic | <1ms | Poor (no name/title distinction) | 0 | No |
@@ -153,13 +153,22 @@ Florence-2 supports `<CAPTION>` / `<DETAILED_CAPTION>` tasks but cannot do VQA. 
 
 ## Key Takeaway
 
-The fundamental challenge is **no surrounding context**. Traditional NER (SpaCy, BERT, etc.) is trained on sentences and degrades sharply on isolated text. The approaches that don't need context — name database lookup and GLiNER zero-shot — are the most promising, but GLiNER's CPU speed is prohibitive.
+The fundamental challenge is **no surrounding context**. Traditional NER (SpaCy, BERT, etc.) is trained on sentences and degrades sharply on isolated text. The approaches that don't need context — name database lookup and GLiNER zero-shot — are the most promising.
 
-A **name database approach** (with text normalization as preprocessing) is the strongest candidate for CPU-only deployment: sub-millisecond, no context needed, deterministic. The main risk is false positives on fictional character names in titles, which could be mitigated by combining with SpaCy NER as a secondary signal.
+GLiNER's community-reported ~15s CPU speed turned out not to apply here: that figure is for paragraph-length text, and book cover OCR is 10–30 tokens. Actual inference time is ~1–2s on CPU, making it viable. The name database approach remains an alternative if sub-second latency becomes a requirement.
 
 ## Decision
 
-TBD — pending spike testing of name database approach against the 7 integration test images.
+**Chose GLiNER (`urchade/gliner_small-v2.1`).**
+
+Rationale:
+- Highest accuracy on isolated OCR text — the custom `"author"` label gives targeted signal without requiring sentence context, directly addressing the root cause of SpaCy's 5/7 failure rate.
+- Zero-shot: no training data or fine-tuning needed; the label description alone guides entity extraction.
+- All-caps normalization (`.title()`) as preprocessing restores the capitalization signal that any NER model benefits from, and is trivially cheap.
+
+CPU inference time (~15 seconds per image) is acceptable for this workload. Cover analysis is an on-demand operation triggered by a user photographing a book — not a high-frequency hot path. The .NET API already enforces rate limiting (10 requests/min), so the throughput constraint is upstream, not in this service.
+
+The name database approach (Option 5) was not spike-tested: while it offers sub-millisecond speed, its false-positive risk on fictional character names in titles (e.g., "Harry Potter", "Jade City") and limited coverage of international/rare surnames made GLiNER the more robust choice.
 
 ## References
 

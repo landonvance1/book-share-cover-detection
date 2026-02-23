@@ -7,7 +7,7 @@ A Python microservice that analyzes book cover images to identify the title and 
 When a user photographs a book cover in the BookSharing mobile app, this service:
 
 1. Runs **Florence-2** locally to extract text from the image
-2. Uses **SpaCy NLP** to identify which text is likely the title vs. author vs. noise
+2. Uses **GLiNER** (zero-shot NER) to identify which text is the author name
 3. Queries the **OpenLibrary API** with NLP-informed search terms
 4. Returns scored, structured book matches
 
@@ -60,7 +60,7 @@ book-share-api (.NET 8)
 book-share-cover-detection (this service)
     │
     ├── Florence-2    — local vision-language model OCR (no cloud dependency)
-    ├── SpaCy         — NLP title/author identification with confidence scores
+    ├── GLiNER        — zero-shot NER for author name extraction
     └── OpenLibrary   — external book search (openlibrary.org)
 ```
 
@@ -88,12 +88,20 @@ Set ONNX_NUM_THREADS in .env file (unless defauly of 4 is sufficient)
 
 EasyOCR and DocTR were evaluated and discarded — each achieved 4/7 on a different subset of images and no preprocessing strategy improved either engine's pass rate. See `docs/decisions/001-ocr-engine-selection.md` for the full evaluation and `experiments/PREPROCESSING_FINDINGS.md` for preprocessing sweep results.
 
+### NLP Engine
+
+GLiNER (`urchade/gliner_small-v2.1`, 166M parameters) is a zero-shot NER model that uses a custom label `"author"` to score all possible text spans in a single forward pass. Unlike SpaCy or BERT-based NER, it does not require sentence-level context — it works directly on isolated OCR text like `"BRANDON SANDERSON MISTBORN"`.
+
+The model (~330 MB) downloads automatically from HuggingFace on first use and is cached locally. CPU inference takes approximately 15 seconds per image, which is acceptable for this on-demand workload.
+
+All-caps OCR text (a common Florence-2 output pattern) is normalized via `.title()` before inference to restore the capitalization signal that GLiNER uses for name recognition.
+
 ### Abstractions
 
 The OCR and NLP engines are both behind interfaces, making it straightforward to swap in alternatives:
 
 - **OCR**: Florence-2 PyTorch (default), Florence-2 ONNX (see ONNX Engine Setup above)
-- **NLP**: SpaCy (default), Hugging Face transformers, custom models
+- **NLP**: GLiNER (default), Hugging Face transformers, custom models
 
 ## Getting Started
 
@@ -106,10 +114,9 @@ The OCR and NLP engines are both behind interfaces, making it straightforward to
 
 ```bash
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 ```
 
-Florence-2 (~1 GB) downloads automatically from HuggingFace on first use and is cached locally.
+Florence-2 (~1 GB) and GLiNER (~330 MB) both download automatically from HuggingFace on first use and are cached locally.
 
 ### Running
 
@@ -153,7 +160,8 @@ app/
 ├── engines/
 │   ├── florence2_engine.py       # Florence-2 PyTorch implementation
 │   ├── florence2_onnx_engine.py  # Florence-2 ONNX implementation
-│   └── spacy_engine.py      # SpaCy implementation
+│   ├── gliner_engine.py     # GLiNER zero-shot NER implementation
+│   └── spacy_engine.py      # SpaCy implementation (unused stub)
 ├── services/
 │   ├── analyzer.py      # Orchestrates OCR → NLP → search
 │   └── openlibrary.py   # OpenLibrary API client
