@@ -5,7 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-from app.models import AnalysisStatus, CoverAnalysisResponse, NlpAnalysis
+from app.models import AnalysisStatus, CoverAnalysisResponse, NlpAnalysis, OcrResult
 
 
 @pytest.fixture
@@ -13,12 +13,11 @@ def mock_analyzer():
     with patch("app.main.analyzer") as mock:
         mock.analyze = AsyncMock(
             return_value=CoverAnalysisResponse(
-                analysis=AnalysisStatus(
-                    is_success=True,
-                    extracted_text="The Great Gatsby",
+                analysisStatus=AnalysisStatus(
+                    is_success=True
                 ),
-                matched_books=[],
                 nlp_analysis=NlpAnalysis(potential_authors=["F. Scott Fitzgerald"]),
+                ocr_result=OcrResult(text="F. Scott Fitzgerald Great Gatsby", regions=[])
             )
         )
         yield mock
@@ -51,7 +50,7 @@ class TestAnalyzeEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["analysis"]["isSuccess"] is True
+        assert data["analysisStatus"]["isSuccess"] is True
         mock_analyzer.analyze.assert_called_once()
 
     @pytest.mark.asyncio

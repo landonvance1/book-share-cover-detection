@@ -6,7 +6,6 @@ from app.engines.florence2_engine import Florence2OcrEngine
 from app.engines.gliner_engine import GlinerNlpEngine
 from app.models import CoverAnalysisResponse, HealthResponse
 from app.services.analyzer import CoverAnalyzer
-from app.services.openlibrary import OpenLibraryClient
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_FILE_SIZE = 4 * 1024 * 1024  # 4 MB
@@ -19,8 +18,7 @@ async def lifespan(app: FastAPI):
     global analyzer
     ocr_engine = Florence2OcrEngine()
     nlp_engine = GlinerNlpEngine()
-    book_search = OpenLibraryClient()
-    analyzer = CoverAnalyzer(ocr_engine, nlp_engine, book_search)
+    analyzer = CoverAnalyzer(ocr_engine, nlp_engine)
     yield
     analyzer = None
 

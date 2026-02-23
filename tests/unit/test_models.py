@@ -28,18 +28,16 @@ class TestCamelCaseSerialization:
         data = status.model_dump(by_alias=True)
         assert "isSuccess" in data
         assert "errorMessage" in data
-        assert "extractedText" in data
 
     def test_cover_analysis_response_camel_case(self):
         response = CoverAnalysisResponse(
-            analysis=AnalysisStatus(is_success=True),
+            analysisStatus=AnalysisStatus(is_success=True),
             matched_books=[],
             nlp_analysis=NlpAnalysis(),
         )
         data = response.model_dump(by_alias=True)
-        assert "matchedBooks" in data
-        assert "exactMatch" in data
         assert "nlpAnalysis" in data
+        assert "ocrResult" in data
 
     def test_ocr_bounding_box_camel_case(self):
         box = OcrBoundingBox(text="test", confidence=0.9, coordinates=[[0, 0]])
@@ -66,15 +64,13 @@ class TestOptionalFields:
     def test_analysis_status_optional_fields(self):
         status = AnalysisStatus(is_success=False)
         assert status.error_message is None
-        assert status.extracted_text is None
 
     def test_cover_analysis_response_defaults(self):
         response = CoverAnalysisResponse(
-            analysis=AnalysisStatus(is_success=True),
+            analysisStatus=AnalysisStatus(is_success=True),
         )
-        assert response.matched_books == []
-        assert response.exact_match is None
         assert response.nlp_analysis is None
+        assert response.ocr_result is None
 
 
 class TestOcrResult:

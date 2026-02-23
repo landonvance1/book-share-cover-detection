@@ -35,15 +35,11 @@ class BookMatch(CamelModel):
 class AnalysisStatus(CamelModel):
     is_success: bool
     error_message: str | None = None
-    extracted_text: str | None = None
-
 
 class CoverAnalysisResponse(CamelModel):
-    analysis: AnalysisStatus
-    matched_books: list[BookMatch] = []
-    exact_match: BookMatch | None = None
+    analysisStatus: AnalysisStatus
+    ocr_result: OcrResult | None = None
     nlp_analysis: NlpAnalysis | None = None
-
 
 class HealthResponse(CamelModel):
     status: str
