@@ -20,7 +20,7 @@ class TestCoverAnalyzer:
         assert result.analysis.is_success is True
         assert result.analysis.extracted_text == sample_ocr_result.text
         assert result.nlp_analysis is not None
-        assert result.nlp_analysis.detected_title == "The Great Gatsby"
+        assert result.nlp_analysis.potential_authors == ["F Scott Fitzgerald"]
 
     @pytest.mark.asyncio
     async def test_ocr_failure(self):
@@ -73,12 +73,7 @@ class TestCoverAnalyzer:
     @pytest.mark.asyncio
     async def test_data_flows_through_pipeline(self):
         ocr_result = OcrResult(text="Specific Test Text", regions=[])
-        nlp_result = NlpAnalysis(
-            detected_title="Specific Test",
-            title_confidence=0.95,
-            detected_author="Text Author",
-            author_confidence=0.85,
-        )
+        nlp_result = NlpAnalysis(potential_authors=["Text Author"])
         books = [
             BookMatch(title="Specific Test", author="Text Author"),
         ]
@@ -91,5 +86,4 @@ class TestCoverAnalyzer:
         result = await analyzer.analyze(b"image")
 
         assert result.analysis.extracted_text == "Specific Test Text"
-        assert result.nlp_analysis.detected_title == "Specific Test"
-        assert result.nlp_analysis.detected_author == "Text Author"
+        assert result.nlp_analysis.potential_authors == ["Text Author"]

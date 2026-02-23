@@ -11,17 +11,10 @@ from app.models import (
 
 class TestCamelCaseSerialization:
     def test_nlp_analysis_camel_case(self):
-        result = NlpAnalysis(
-            detected_title="Test",
-            title_confidence=0.9,
-            detected_author="Author",
-            author_confidence=0.8,
-        )
+        result = NlpAnalysis(potential_authors=["Author One", "Author Two"])
         data = result.model_dump(by_alias=True)
-        assert "detectedTitle" in data
-        assert "titleConfidence" in data
-        assert "detectedAuthor" in data
-        assert "authorConfidence" in data
+        assert "potentialAuthors" in data
+        assert data["potentialAuthors"] == ["Author One", "Author Two"]
 
     def test_book_match_camel_case(self):
         book = BookMatch(
@@ -63,10 +56,7 @@ class TestCamelCaseSerialization:
 class TestOptionalFields:
     def test_nlp_analysis_defaults(self):
         result = NlpAnalysis()
-        assert result.detected_title is None
-        assert result.title_confidence == 0.0
-        assert result.detected_author is None
-        assert result.author_confidence == 0.0
+        assert result.potential_authors == []
 
     def test_book_match_optional_fields(self):
         book = BookMatch(title="Test", author="Author")
