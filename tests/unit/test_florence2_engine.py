@@ -41,6 +41,7 @@ class TestFlorence2OcrEngineInit:
         Florence2OcrEngine()
         mock_model_cls.from_pretrained.assert_called_once_with(
             "microsoft/Florence-2-base",
+            revision=None,
             torch_dtype=torch.float32,
             trust_remote_code=True,
             attn_implementation="eager",
@@ -54,6 +55,7 @@ class TestFlorence2OcrEngineInit:
         Florence2OcrEngine(model_name="microsoft/Florence-2-large")
         mock_model_cls.from_pretrained.assert_called_once_with(
             "microsoft/Florence-2-large",
+            revision=None,
             torch_dtype=torch.float32,
             trust_remote_code=True,
             attn_implementation="eager",
