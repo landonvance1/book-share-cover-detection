@@ -43,6 +43,7 @@ class TestFlorence2OcrEngineInit:
             "microsoft/Florence-2-base",
             torch_dtype=torch.float32,
             trust_remote_code=True,
+            attn_implementation="eager",
         )
         mock_processor_cls.from_pretrained.assert_called_once_with(
             "microsoft/Florence-2-base", trust_remote_code=True
@@ -55,6 +56,7 @@ class TestFlorence2OcrEngineInit:
             "microsoft/Florence-2-large",
             torch_dtype=torch.float32,
             trust_remote_code=True,
+            attn_implementation="eager",
         )
 
     def test_cpu_device_by_default(self, mock_transformers):
