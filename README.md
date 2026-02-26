@@ -184,10 +184,48 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ### Docker
 
+#### Quick Start
+
 ```bash
 docker build -t book-share-cover-detection .
 docker run -p 8000:8000 book-share-cover-detection
 ```
+
+Or with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+#### Build Options
+
+By default, the image uses the **ONNX engine** (Florence-2 ONNX with q4 quantization). To build with the PyTorch engine instead:
+
+```bash
+docker build --build-arg OCR_ENGINE=pytorch -t book-share-cover-detection .
+```
+
+**Engine comparison:**
+- **ONNX (default)**: Pre-quantized, ~3-5x faster on CPU, smaller memory footprint (~2 GB image)
+- **PyTorch**: Slower on CPU but supports GPU acceleration, larger image (~3 GB)
+
+#### Environment Variables
+
+Copy `.env.example` to `.env` and adjust values:
+
+```bash
+cp .env.example .env
+```
+
+Key settings:
+- `OCR_ENGINE`: Must match the build ARG (`onnx` or `pytorch`)
+- `ONNX_MODEL_PATH`: Path to the ONNX model directory (default: `/opt/hf_cache/florence2-onnx`)
+- `ONNX_PROCESSOR_NAME`: HuggingFace model name for the ONNX processor (default: `microsoft/Florence-2-base-ft`)
+- `ONNX_NUM_THREADS`: ONNX Runtime thread count (default: 4)
+
+#### Offline Deployment
+
+The Docker image bakes in all required models (`florence2`, `gliner`, and tokenizer dependencies) during build. Set `HF_HUB_OFFLINE=1` to prevent any runtime network calls—useful for airgapped or unreliable network environments. The Dockerfile does this by default.
 
 ## Development
 

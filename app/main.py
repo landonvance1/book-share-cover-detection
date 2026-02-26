@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-from app.engines.florence2_engine import Florence2OcrEngine
+from app.config import settings
 from app.engines.gliner_engine import GlinerNlpEngine
 from app.models import CoverAnalysisResponse, HealthResponse
 from app.services.analyzer import CoverAnalyzer
@@ -16,8 +16,16 @@ analyzer: CoverAnalyzer | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global analyzer
-    ocr_engine = Florence2OcrEngine()
-    nlp_engine = GlinerNlpEngine()
+    if settings.ocr_engine == "onnx":
+        from app.engines.florence2_onnx_engine import Florence2OnnxEngine
+        ocr_engine = Florence2OnnxEngine(
+            model_path=settings.onnx_model_path,
+            processor_name=settings.onnx_processor_name,
+        )
+    else:
+        from app.engines.florence2_engine import Florence2OcrEngine
+        ocr_engine = Florence2OcrEngine(model_name=settings.pytorch_model_name)
+    nlp_engine = GlinerNlpEngine(revision=settings.gliner_model_revision)
     analyzer = CoverAnalyzer(ocr_engine, nlp_engine)
     yield
     analyzer = None
