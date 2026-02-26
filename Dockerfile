@@ -22,38 +22,58 @@ RUN useradd --create-home --shell /bin/bash appuser \
 
 USER appuser
 
+# Copy constants.py early so model download commands can import from it.
+# This ensures model revisions are defined in a single place (app/constants.py).
+COPY --chown=appuser:appuser app/constants.py ./app/constants.py
+
 # Select which Florence-2 model to download based on OCR_ENGINE build ARG.
 # Default is "onnx" (onnx-community/Florence-2-base-ft, flat layout at /opt/hf_cache/florence2-onnx).
 # Use --build-arg OCR_ENGINE=pytorch for the PyTorch model (microsoft/Florence-2-base).
 # The local_dir option writes a flat file layout so the path is predictable at runtime.
+# Model revisions are imported from app/constants.py for single-source-of-truth.
 ARG OCR_ENGINE=onnx
 RUN if [ "$OCR_ENGINE" = "onnx" ]; then \
       python -c "\
+import sys; sys.path.insert(0, '/app'); \
+from app.constants import FLORENCE2_ONNX_MODEL, FLORENCE2_ONNX_REVISION; \
 from huggingface_hub import snapshot_download; \
-snapshot_download('onnx-community/Florence-2-base-ft', local_dir='/opt/hf_cache/florence2-onnx')"; \
-      python -c "\
-from transformers import AutoProcessor; \
-AutoProcessor.from_pretrained('microsoft/Florence-2-base-ft', trust_remote_code=True)"; \
+snapshot_download(FLORENCE2_ONNX_MODEL, local_dir='/opt/hf_cache/florence2-onnx', revision=FLORENCE2_ONNX_REVISION) \
+"; \
     else \
       python -c "\
+import sys; sys.path.insert(0, '/app'); \
+from app.constants import FLORENCE2_PYTORCH_MODEL, FLORENCE2_PYTORCH_REVISION; \
 from huggingface_hub import snapshot_download; \
-snapshot_download('microsoft/Florence-2-base', local_dir='/opt/hf_cache/florence2-pytorch', revision='5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac')"; \
+snapshot_download(FLORENCE2_PYTORCH_MODEL, local_dir='/opt/hf_cache/florence2-pytorch', revision=FLORENCE2_PYTORCH_REVISION) \
+"; \
     fi
 
-# Pre-download GLiNER (~330 MB) during build.
-# To update: check https://huggingface.co/urchade/gliner_large-v2.1/commits/main
 RUN python -c "\
+import sys; sys.path.insert(0, '/app'); \
+from app.constants import FLORENCE2_PROCESSOR_MODEL; \
+from transformers import AutoProcessor; \
+AutoProcessor.from_pretrained(FLORENCE2_PROCESSOR_MODEL, trust_remote_code=True) \
+"
+
+# Pre-download GLiNER (~330 MB) during build.
+# Model name and revision are imported from app/constants.py for single-source-of-truth.
+RUN python -c "\
+import sys; sys.path.insert(0, '/app'); \
+from app.constants import GLINER_MODEL, GLINER_REVISION; \
 from huggingface_hub import snapshot_download; \
-snapshot_download('urchade/gliner_large-v2.1', revision='abd49a1f1ebc12af1be84d06f6848221cf96dcad')"
+snapshot_download(GLINER_MODEL, revision=GLINER_REVISION) \
+"
 
 # GLiNER loads its backbone tokenizer from config.model_name at runtime.
 # gliner_large-v2.1 uses microsoft/deberta-v3-large as its backbone.
 # Pre-download it so the lookup works in offline mode.
 RUN python -c "\
+import sys; sys.path.insert(0, '/app'); \
+from app.constants import GLINER_BACKBONE_MODEL; \
 from transformers import AutoTokenizer; \
-AutoTokenizer.from_pretrained('microsoft/deberta-v3-large')"
+AutoTokenizer.from_pretrained(GLINER_BACKBONE_MODEL) \
+"
 
-ENV GLINER_MODEL_REVISION=abd49a1f1ebc12af1be84d06f6848221cf96dcad
 # Local path for the pytorch Florence-2 model (only used when OCR_ENGINE=pytorch).
 # snapshot_download with local_dir uses a flat layout that from_pretrained can read directly.
 ENV PYTORCH_MODEL_NAME=/opt/hf_cache/florence2-pytorch

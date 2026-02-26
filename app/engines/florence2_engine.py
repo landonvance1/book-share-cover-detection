@@ -24,12 +24,13 @@ _dmu.get_imports = _get_imports_no_flash_attn
 
 
 class Florence2OcrEngine(OcrEngine):
-    def __init__(self, model_name: str = "microsoft/Florence-2-base", gpu: bool = False, num_beams: int = 1) -> None:
+    def __init__(self, model_name: str = "microsoft/Florence-2-base", revision: str | None = None, gpu: bool = False, num_beams: int = 1) -> None:
         device = "cuda" if gpu else "cpu"
         dtype = torch.float16 if gpu else torch.float32
         self._model = AutoModelForCausalLM.from_pretrained(
-            model_name, 
-            torch_dtype=dtype, 
+            model_name,
+            revision=revision,
+            torch_dtype=dtype,
             trust_remote_code=True,
             attn_implementation="eager"
         ).to(device)

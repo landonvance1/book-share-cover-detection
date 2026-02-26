@@ -24,7 +24,10 @@ async def lifespan(app: FastAPI):
         )
     else:
         from app.engines.florence2_engine import Florence2OcrEngine
-        ocr_engine = Florence2OcrEngine(model_name=settings.pytorch_model_name)
+        ocr_engine = Florence2OcrEngine(
+            model_name=settings.pytorch_model_name,
+            revision=settings.pytorch_florence2_revision,
+        )
     nlp_engine = GlinerNlpEngine(revision=settings.gliner_model_revision)
     analyzer = CoverAnalyzer(ocr_engine, nlp_engine)
     yield
