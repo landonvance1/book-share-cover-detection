@@ -214,3 +214,79 @@ Return structured error responses, not exceptions. The .NET API maps errors like
 - Invalid image → 400
 
 This service should return clear error objects so the .NET API can map them appropriately.
+
+## Docker Deployment
+
+### Quick Start
+
+Build and run the service:
+
+```bash
+docker build -t book-share-cover-detection .
+docker run -p 8000:8000 book-share-cover-detection
+```
+
+Or with Docker Compose (recommended for local dev + integration with book-share-api):
+
+```bash
+docker compose up --build
+```
+
+### Build Options
+
+By default, the Dockerfile uses the **ONNX engine** (Florence-2 ONNX with q4 quantization). To build with the PyTorch engine instead:
+
+```bash
+docker build --build-arg OCR_ENGINE=pytorch -t book-share-cover-detection .
+```
+
+**Engine comparison:**
+- **ONNX (default)**: Pre-quantized, ~3-5x faster on CPU, smaller memory footprint (~2 GB image size)
+- **PyTorch**: Slower on CPU but supports GPU acceleration, larger image (~3 GB image size)
+
+### Dockerfile Strategy
+
+The Dockerfile implements several optimization strategies:
+
+1. **Model Pre-Download**: All models (Florence-2, GLiNER, and their tokenizer dependencies) are downloaded during build and baked into the image. This ensures:
+   - Offline deployments work without HuggingFace network access
+   - No download delays at container startup
+   - Reproducible, pinned model versions
+
+2. **Non-Root User**: The application runs as `appuser` (non-root) for security
+
+3. **Health Check**: Includes a health check endpoint for container orchestration (`GET /health`, 30s interval, 120s start period)
+
+4. **Efficient Layering**: Model downloads are cached separately from application code, so code changes don't invalidate model layers
+
+### Configuration
+
+Create a `.env` file (copy from `.env.example`) to configure the service:
+
+```bash
+cp .env.example .env
+```
+
+Key settings:
+- `OCR_ENGINE`: Must match the build ARG used during `docker build` (`onnx` or `pytorch`)
+- `ONNX_MODEL_PATH`: Path to the ONNX model directory (default: `/opt/hf_cache/florence2-onnx`)
+- `ONNX_PROCESSOR_NAME`: HuggingFace model name for the ONNX processor (default: `microsoft/Florence-2-base-ft`)
+- `ONNX_NUM_THREADS`: ONNX Runtime thread count (default: 4; tune to match physical cores available)
+- `GLINER_MODEL_REVISION`: Pinned GLiNER model revision to ensure reproducibility
+
+### Offline Deployment
+
+The Docker image is designed for airgapped deployments. All required models are baked into the image during build, and `HF_HUB_OFFLINE=1` is set to prevent runtime network calls. This is useful for:
+- Airgapped or firewalled environments
+- Unreliable network conditions
+- Deterministic, fully reproducible deployments
+
+### Scaling Considerations
+
+The .NET API (`book-share-api`) and this cover detection service have different resource requirements. By running them in separate containers:
+
+1. You can scale the cover detection service independently when OCR/NLP throughput becomes a bottleneck
+2. The lightweight .NET API can run with minimal resources
+3. Each service can target its optimal runtime (Python for ML, .NET for API orchestration)
+
+The .NET API will forward image analysis requests to this service via HTTP (`POST /analyze`), treating it as an external dependency.

@@ -51,9 +51,9 @@ class GlinerNlpEngine(NlpEngine):
     DEFAULT_MODEL = "urchade/gliner_large-v2.1"
     DEFAULT_THRESHOLD = 0.4
 
-    def __init__(self, model_name: str = DEFAULT_MODEL, threshold: float = DEFAULT_THRESHOLD):
+    def __init__(self, model_name: str = DEFAULT_MODEL, threshold: float = DEFAULT_THRESHOLD, revision: str | None = None):
         from gliner import GLiNER  # lazy import — gliner is heavy and optional at import time
-        self._model = GLiNER.from_pretrained(model_name)
+        self._model = GLiNER.from_pretrained(model_name, revision=revision)
         self._threshold = threshold
 
     async def analyze(self, ocr_result: OcrResult) -> NlpAnalysis:

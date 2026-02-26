@@ -28,7 +28,10 @@ class Florence2OcrEngine(OcrEngine):
         device = "cuda" if gpu else "cpu"
         dtype = torch.float16 if gpu else torch.float32
         self._model = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype=dtype, trust_remote_code=True
+            model_name, 
+            torch_dtype=dtype, 
+            trust_remote_code=True,
+            attn_implementation="eager"
         ).to(device)
         self._processor = AutoProcessor.from_pretrained(
             model_name, trust_remote_code=True
@@ -51,6 +54,7 @@ class Florence2OcrEngine(OcrEngine):
             input_ids=input_ids,
             pixel_values=pixel_values,
             max_new_tokens=1024,
+            use_cache=False,
             num_beams=self._num_beams,
             do_sample=False,
             early_stopping=self._num_beams > 1,

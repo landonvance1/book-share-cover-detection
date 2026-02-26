@@ -130,7 +130,7 @@ class TestFlorence2OnnxEngineInit:
             assert any("vision_encoder.onnx" in p for p in paths)
             assert any("decoder_model_merged.onnx" in p for p in paths)
 
-    def test_processor_loaded_with_trust_remote_code(self, mock_onnx_deps):
+    def test_processor_loaded_from_local_path(self, mock_onnx_deps):
         _, proc = mock_onnx_deps
         sessions = _make_sessions()
         _configure_embed_run(sessions)

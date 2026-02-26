@@ -36,7 +36,7 @@ class Florence2OnnxEngine(OcrEngine):
 
     def __init__(
         self,
-        model_path: str,
+        model_path: str = "/opt/hf_cache/florence2-onnx",
         quantization: str = "q4",
         processor_name: str = "microsoft/Florence-2-base-ft",
         intra_op_num_threads: int | None = None,
