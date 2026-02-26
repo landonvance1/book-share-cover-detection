@@ -253,11 +253,18 @@ The Dockerfile implements several optimization strategies:
    - No download delays at container startup
    - Reproducible, pinned model versions
 
-2. **Non-Root User**: The application runs as `appuser` (non-root) for security
+2. **BuildKit Host Cache**: Each model download `RUN` step uses `--mount=type=cache` to persist HuggingFace blobs in a BuildKit cache directory on the host between builds. On the first build, models download from HF Hub normally. On subsequent builds where a layer is re-run (e.g. a prior layer changed), HF finds the blobs already in the host cache and skips the network download. Two storage patterns:
+   - **Flat-layout models** (Florence-2 ONNX/PyTorch via `local_dir`): blobs go to the cache mount; `snapshot_download` copies the actual files into the image layer (hard-links fall back to copies across filesystem boundaries, so no dangling symlinks end up in the image)
+   - **Standard HF cache models** (GLiNER, DeBERTa, AutoProcessor): downloaded to the cache mount, then `cp -a` copies the model directory into `/opt/hf_cache/hub/` in the image layer
+   - Cache IDs: `hf-florence2`, `hf-gliner`, `hf-deberta`
 
-3. **Health Check**: Includes a health check endpoint for container orchestration (`GET /health`, 30s interval, 120s start period)
+3. **Revision-Based Cache Invalidation**: Model revisions are exposed as build ARGs (`GLINER_REVISION`, `FLORENCE2_PYTORCH_REVISION`). Changing a revision changes the `RUN` instruction content, which invalidates Docker's layer cache and causes the step to re-run — downloading only the new revision into the host cache while older revisions remain available there for previous image builds.
 
-4. **Efficient Layering**: Model downloads are cached separately from application code, so code changes don't invalidate model layers
+4. **Non-Root User**: The application runs as `appuser` (non-root) for security
+
+5. **Health Check**: Includes a health check endpoint for container orchestration (`GET /health`, 30s interval, 120s start period)
+
+6. **Efficient Layering**: Model downloads are cached separately from application code, so code changes don't invalidate model layers
 
 ### Configuration
 
@@ -267,12 +274,17 @@ Create a `.env` file (copy from `.env.example`) to configure the service:
 cp .env.example .env
 ```
 
-Key settings:
+Key runtime settings:
 - `OCR_ENGINE`: Must match the build ARG used during `docker build` (`onnx` or `pytorch`)
 - `ONNX_MODEL_PATH`: Path to the ONNX model directory (default: `/opt/hf_cache/florence2-onnx`)
 - `ONNX_PROCESSOR_NAME`: HuggingFace model name for the ONNX processor (default: `microsoft/Florence-2-base-ft`)
 - `ONNX_NUM_THREADS`: ONNX Runtime thread count (default: 4; tune to match physical cores available)
-- `GLINER_MODEL_REVISION`: Pinned GLiNER model revision to ensure reproducibility
+- `GLINER_MODEL_REVISION`: Pinned GLiNER model revision (set automatically from the `GLINER_REVISION` build ARG)
+
+Key build ARGs (pass via `--build-arg`):
+- `OCR_ENGINE`: `onnx` (default) or `pytorch`
+- `GLINER_REVISION`: GLiNER commit SHA to bake in (defaults to the pinned revision in the Dockerfile)
+- `FLORENCE2_PYTORCH_REVISION`: Florence-2 PyTorch commit SHA (only used when `OCR_ENGINE=pytorch`)
 
 ### Offline Deployment
 

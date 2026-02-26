@@ -209,6 +209,24 @@ docker build --build-arg OCR_ENGINE=pytorch -t book-share-cover-detection .
 - **ONNX (default)**: Pre-quantized, ~3-5x faster on CPU, smaller memory footprint (~2 GB image)
 - **PyTorch**: Slower on CPU but supports GPU acceleration, larger image (~3 GB)
 
+#### Build Cache
+
+The Dockerfile uses Docker BuildKit cache mounts to persist HuggingFace model downloads on the host between builds. On the first build, models are downloaded from HuggingFace. On subsequent builds, the cached blobs are reused and only new or changed files are fetched from the network.
+
+The cache is keyed by model revision: updating `GLINER_REVISION` or `FLORENCE2_PYTORCH_REVISION` build ARGs invalidates the corresponding layer and triggers a fresh download of the new revision.
+
+To update a pinned model revision:
+
+```bash
+docker build --build-arg GLINER_REVISION=<new-commit-sha> -t book-share-cover-detection .
+```
+
+To clear the BuildKit model cache (forces a full re-download on the next build):
+
+```bash
+docker builder prune --filter type=exec.cachemount
+```
+
 #### Environment Variables
 
 Copy `.env.example` to `.env` and adjust values:
