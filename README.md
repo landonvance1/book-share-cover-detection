@@ -227,6 +227,40 @@ Key settings:
 
 The Docker image bakes in all required models (`florence2`, `gliner`, and tokenizer dependencies) during build. Set `HF_HUB_OFFLINE=1` to prevent any runtime network calls—useful for airgapped or unreliable network environments. The Dockerfile does this by default.
 
+## Test App
+
+A minimal browser-based UI for manually testing the `/analyze` endpoint with a live camera. Useful for testing with real book covers on a phone without needing the full mobile app.
+
+### Setup
+
+```bash
+# 1. Generate a self-signed TLS cert (one-time — cert files are gitignored)
+openssl req -x509 -newkey rsa:2048 \
+  -keyout test_app/key.pem -out test_app/cert.pem \
+  -days 365 -nodes -subj '/CN=localhost'
+
+# 2. Enable the test app
+echo "ENABLE_TEST_APP=true" >> .env
+
+# 3. Start uvicorn with TLS
+uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+  --ssl-keyfile test_app/key.pem --ssl-certfile test_app/cert.pem
+```
+
+Then visit `https://<your-machine-ip>:8000/test/` on a phone connected to the same WiFi network. Accept the browser security warning once.
+
+> **Why HTTPS?** Browsers block camera access (`getUserMedia`) on non-localhost origins without a valid TLS connection.
+
+### Chrome on Android
+
+Chrome may block `getUserMedia` for self-signed certs even after accepting the security warning. Fix it by adding your origin as a trusted secure origin:
+
+1. Open `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
+2. Add `https://<your-machine-ip>:8000`
+3. Enable the flag and relaunch
+
+Safari on iOS works without this step.
+
 ## Development
 
 ### Running Tests
