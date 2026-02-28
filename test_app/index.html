@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Book Cover Tester</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      padding: 12px 16px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+      text-align: center;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.02em; }
+
+    /* ── Viewfinder ── */
+    #viewfinder-wrap {
+      position: relative;
+      height: 45dvh;
+      aspect-ratio: 3 / 4;
+      max-width: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Captured image preview — replaces video during analysis + results */
+    #preview {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: none;
+    }
+
+    /* Dark overlay with a transparent "window" for the guide box */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    /* Guide box — centered, portrait book proportions */
+    #guide-box {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 72%;
+      aspect-ratio: 2 / 3;
+      border: 2px dashed rgba(255, 255, 255, 0.85);
+      border-radius: 4px;
+      /* Dark exterior without covering the inner area */
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    }
+
+    #guide-label {
+      position: absolute;
+      top: -26px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-size: 0.78rem;
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(0,0,0,0.5);
+      padding: 2px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.03em;
+    }
+
+    /* ── Controls ── */
+    #controls {
+      width: 100%;
+      max-width: 540px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #161616;
+    }
+
+    #btn-capture {
+      width: 100%;
+      padding: 14px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    #btn-capture:hover { background: #1d4ed8; }
+    #btn-capture:disabled { background: #374151; cursor: not-allowed; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ── */
+    #results {
+      width: 100%;
+      max-width: 540px;
+      padding: 0 16px 24px;
+      background: #161616;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #error-banner {
+      padding: 10px 14px;
+      background: #450a0a;
+      border: 1px solid #7f1d1d;
+      border-radius: 6px;
+      color: #fca5a5;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .result-group { display: flex; flex-direction: column; gap: 6px; }
+    .result-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #9ca3af;
+      font-weight: 600;
+    }
+    .pill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill {
+      padding: 4px 12px;
+      background: #1e3a5f;
+      border: 1px solid #2563eb55;
+      border-radius: 20px;
+      font-size: 0.88rem;
+      color: #bfdbfe;
+    }
+    .pill.author {
+      background: #14302b;
+      border-color: #06b6d455;
+      color: #a7f3d0;
+    }
+    .empty-note { font-size: 0.85rem; color: #6b7280; font-style: italic; }
+
+    details {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #9ca3af;
+      user-select: none;
+    }
+    summary:hover { color: #d1d5db; }
+    #raw-output {
+      margin: 0;
+      padding: 10px 12px;
+      font-size: 0.75rem;
+      color: #9ca3af;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      border-top: 1px solid #2a2a2a;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    /* Hidden canvases */
+    canvas { display: none; }
+
+    /* Camera error state */
+    #camera-error {
+      display: none;
+      position: absolute;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      color: #9ca3af;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 20px;
+      background: #0a0a0a;
+    }
+    #camera-error.visible { display: flex; }
+    #camera-error svg { opacity: 0.4; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Book Cover Tester</h1>
+</header>
+
+<!-- Viewfinder -->
+<div id="viewfinder-wrap">
+  <video id="video" autoplay playsinline muted></video>
+  <img id="preview" alt="Captured cover" />
+  <div id="overlay">
+    <div id="guide-box">
+      <span id="guide-label">Align book cover here</span>
+    </div>
+  </div>
+  <div id="camera-error">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+      <line x1="2" y1="2" x2="22" y2="22"/>
+    </svg>
+    <span id="camera-error-msg">Camera unavailable</span>
+  </div>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <button id="btn-capture" disabled>
+    <span class="spinner" id="spinner"></span>
+    <span id="btn-label">Capture &amp; Analyze</span>
+  </button>
+</div>
+
+<!-- Results -->
+<div id="results">
+  <div id="error-banner"></div>
+
+  <div class="result-group" id="titles-group">
+    <div class="result-label">Titles</div>
+    <div class="pill-list" id="titles-list"></div>
+  </div>
+
+  <div class="result-group" id="authors-group">
+    <div class="result-label">Authors</div>
+    <div class="pill-list" id="authors-list"></div>
+  </div>
+
+  <details>
+    <summary>&#9654; Raw OCR regions</summary>
+    <pre id="raw-output"></pre>
+  </details>
+</div>
+
+<!-- Hidden canvases -->
+<canvas id="canvas-full"></canvas>
+<canvas id="canvas-crop"></canvas>
+
+<script>
+(async () => {
+  const video       = document.getElementById('video');
+  const preview     = document.getElementById('preview');
+  const overlay     = document.getElementById('overlay');
+  const guideBox    = document.getElementById('guide-box');
+  const btnCapture  = document.getElementById('btn-capture');
+  const btnLabel    = document.getElementById('btn-label');
+  const spinner     = document.getElementById('spinner');
+  const results     = document.getElementById('results');
+  const errBanner   = document.getElementById('error-banner');
+  const titlesList  = document.getElementById('titles-list');
+  const authorsList = document.getElementById('authors-list');
+  const rawOutput   = document.getElementById('raw-output');
+  const canvasFull  = document.getElementById('canvas-full');
+  const canvasCrop  = document.getElementById('canvas-crop');
+  const cameraErr   = document.getElementById('camera-error');
+  const cameraErrMsg = document.getElementById('camera-error-msg');
+
+  let previewUrl = null;
+
+  // ── Camera / preview state helpers ──────────────────────────────────────────
+  function enterCameraMode() {
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    preview.style.display = 'none';
+    preview.src = '';
+    video.style.display = 'block';
+    overlay.style.display = 'block';
+    results.style.display = 'none';
+    errBanner.style.display = 'none';
+    btnCapture.disabled = false;
+    btnCapture.style.background = '';
+    btnLabel.textContent = 'Capture & Analyze';
+  }
+
+  function enterPreviewMode(blob) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(blob);
+    preview.src = previewUrl;
+    preview.style.display = 'block';
+    video.style.display = 'none';
+    overlay.style.display = 'none';
+    // Repurpose the capture button as "New Photo"
+    btnCapture.disabled = false;
+    btnCapture.style.background = '#374151';
+    btnLabel.textContent = '← New Photo';
+    btnCapture.onclick = () => { btnCapture.onclick = null; enterCameraMode(); };
+  }
+
+  // ── Start camera ────────────────────────────────────────────────────────────
+  async function startCamera() {
+    const constraints = [
+      { video: { facingMode: { exact: 'environment' } } },
+      { video: { facingMode: 'environment' } },
+      { video: true },
+    ];
+
+    for (const c of constraints) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(c);
+        video.srcObject = stream;
+        await video.play();
+        btnCapture.disabled = false;
+        return;
+      } catch (_) {
+        // try next constraint
+      }
+    }
+
+    // All failed
+    cameraErrMsg.textContent = 'Camera unavailable — check permissions or use HTTPS';
+    cameraErr.classList.add('visible');
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    cameraErrMsg.textContent = 'getUserMedia not supported (requires HTTPS on non-localhost)';
+    cameraErr.classList.add('visible');
+  } else {
+    await startCamera();
+  }
+
+  // ── Guide box → video-space crop rect ──────────────────────────────────────
+  // The video element uses object-fit: cover, so the actual rendered video may
+  // be wider or taller than the element. We need to map guide-box coordinates
+  // back into the raw video frame.
+  function getCropRect() {
+    const vEl   = video.getBoundingClientRect();
+    const gEl   = guideBox.getBoundingClientRect();
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    // Scale factor: how much bigger is the raw video than the displayed element?
+    // object-fit:cover picks whichever scale fills the element without gaps.
+    const scaleX = vw / vEl.width;
+    const scaleY = vh / vEl.height;
+    const scale  = Math.max(scaleX, scaleY); // cover = max scale
+
+    // Offset: the part of the raw video hidden (cropped) by object-fit:cover
+    const offsetX = (vw - vEl.width  * scale) / 2;
+    const offsetY = (vh - vEl.height * scale) / 2;
+
+    // Guide box position relative to the video element
+    const relLeft = gEl.left - vEl.left;
+    const relTop  = gEl.top  - vEl.top;
+
+    // Map to raw video coordinates
+    const sx = relLeft * scale + offsetX;
+    const sy = relTop  * scale + offsetY;
+    const sw = gEl.width  * scale;
+    const sh = gEl.height * scale;
+
+    return { sx, sy, sw, sh };
+  }
+
+  // ── Compress canvas to JPEG blob ≤ maxBytes ─────────────────────────────────
+  async function compressBlob(canvas, maxBytes = 4 * 1024 * 1024) {
+    // 1. Cap max dimension at 1920px
+    let w = canvas.width;
+    let h = canvas.height;
+    const MAX_DIM = 1920;
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
+    }
+
+    const scaled = document.createElement('canvas');
+    scaled.width  = w;
+    scaled.height = h;
+    scaled.getContext('2d').drawImage(canvas, 0, 0, w, h);
+
+    // 2. Iterate quality until under maxBytes (start at 0.8 to match mobile app)
+    for (let q = 0.80; q >= 0.40; q -= 0.08) {
+      const blob = await new Promise(res => scaled.toBlob(res, 'image/jpeg', q));
+      if (blob && blob.size <= maxBytes) return blob;
+    }
+
+    // Fallback: lowest quality
+    return new Promise(res => scaled.toBlob(res, 'image/jpeg', 0.40));
+  }
+
+  // ── Capture + analyze ───────────────────────────────────────────────────────
+  btnCapture.addEventListener('click', async () => {
+    if (video.readyState < video.HAVE_ENOUGH_DATA) return;
+
+    btnCapture.disabled = true;
+    spinner.style.display = 'block';
+    btnLabel.textContent  = 'Analyzing…';
+    results.style.display = 'none';
+
+    try {
+      // Draw full frame
+      canvasFull.width  = video.videoWidth;
+      canvasFull.height = video.videoHeight;
+      canvasFull.getContext('2d').drawImage(video, 0, 0);
+
+      // Crop to guide box region
+      const { sx, sy, sw, sh } = getCropRect();
+      canvasCrop.width  = Math.round(sw);
+      canvasCrop.height = Math.round(sh);
+      canvasCrop.getContext('2d').drawImage(
+        video,
+        sx, sy, sw, sh,
+        0,  0,  canvasCrop.width, canvasCrop.height
+      );
+
+      const blob = await compressBlob(canvasCrop);
+
+      // Show the cropped image in the viewfinder while the API call runs
+      enterPreviewMode(blob);
+
+      // Send to API
+      const form = new FormData();
+      form.append('file', blob, 'cover.jpg');
+
+      const res  = await fetch('/analyze', { method: 'POST', body: form });
+      const data = await res.json();
+
+      showResults(data);
+    } catch (err) {
+      showError(err.message || 'Network error');
+    } finally {
+      spinner.style.display = 'none';
+    }
+  });
+
+  // ── Render results ──────────────────────────────────────────────────────────
+  function showResults(data) {
+    results.style.display = 'flex';
+
+    // Error banner
+    const analysis = data.analysis ?? data.analysisStatus ?? {};
+    if (analysis.isSuccess === false && analysis.errorMessage) {
+      errBanner.textContent    = analysis.errorMessage;
+      errBanner.style.display  = 'block';
+    } else {
+      errBanner.style.display  = 'none';
+    }
+
+    // NLP results
+    const nlp = data.nlpAnalysis ?? {};
+    renderPills(titlesList,  nlp.potentialTitles  ?? [], 'title');
+    renderPills(authorsList, nlp.potentialAuthors ?? [], 'author');
+
+    // Raw OCR
+    rawOutput.textContent = JSON.stringify(data.ocrResult ?? data, null, 2);
+  }
+
+  function renderPills(container, items, kind) {
+    container.innerHTML = '';
+    if (!items.length) {
+      container.innerHTML = '<span class="empty-note">None detected</span>';
+      return;
+    }
+    for (const text of items) {
+      const pill = document.createElement('span');
+      pill.className = 'pill' + (kind === 'author' ? ' author' : '');
+      pill.textContent = text;
+      container.appendChild(pill);
+    }
+  }
+
+  function showError(msg) {
+    results.style.display   = 'flex';
+    errBanner.textContent   = msg;
+    errBanner.style.display = 'block';
+    titlesList.innerHTML    = '';
+    authorsList.innerHTML   = '';
+    rawOutput.textContent   = '';
+  }
+})();
+</script>
+</body>
+</html>

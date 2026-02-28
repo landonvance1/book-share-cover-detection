@@ -38,3 +38,7 @@ Thumbs.db
 
 # ONNX model artifacts (download separately)
 florence2-onnx/
+
+# Test app TLS certs (generated locally, never committed)
+test_app/cert.pem
+test_app/key.pem

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.engines.gliner_engine import GlinerNlpEngine
@@ -60,3 +61,7 @@ async def analyze_cover(file: UploadFile = File(...)):
 
     assert analyzer is not None
     return await analyzer.analyze(image_bytes)
+
+
+if settings.enable_test_app:
+    app.mount("/test", StaticFiles(directory="test_app", html=True), name="test_app")

@@ -49,5 +49,10 @@ class Settings(BaseSettings):
     # Default is false to avoid overhead in production.
     onnx_log_timing: bool = False
 
+    # When true, serves the static test webapp at /test/.
+    # Set ENABLE_TEST_APP=true in the environment or .env to enable.
+    # Disabled by default — not intended for production use.
+    enable_test_app: bool = False
+
 
 settings = Settings()
