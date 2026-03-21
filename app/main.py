@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Book Cover Detection", version="0.1.0", lifespan=lifespan)
-Instrumentator(skip_paths=["/health"]).instrument(app).expose(app, endpoint="/metrics")
+Instrumentator(excluded_handlers=["/health"]).instrument(app).expose(app, endpoint="/metrics")
 
 
 @app.get("/health", response_model=HealthResponse)

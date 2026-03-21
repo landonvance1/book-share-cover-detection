@@ -32,7 +32,7 @@ async def client():
 
 class TestHealthEndpoint:
     @pytest.mark.asyncio
-    async def test_health_returns_200(self, client):
+    async def test_health_returns_200(self, client, mock_analyzer):
         response = await client.get("/health")
         assert response.status_code == 200
         data = response.json()
