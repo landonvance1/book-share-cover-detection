@@ -105,7 +105,27 @@ Accepts a multipart image upload (JPEG, PNG, or WebP, max 4 MB) and returns stru
 
 ### `GET /health`
 
-Returns service health status for container orchestration.
+Returns service health status for container orchestration. The `status` field is `"starting"` while models are loading and `"healthy"` once the service is ready to accept requests.
+
+### `GET /metrics`
+
+Exposes Prometheus metrics for monitoring and alerting.
+
+**Metrics included:**
+- HTTP request counts, latencies, and status codes per endpoint
+- Request/response sizes
+- Requests currently in progress
+
+**Integrating with Prometheus** — add to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'cover-detection'
+    static_configs:
+      - targets: ['cover-detection:8000']
+```
+
+Health check requests are excluded from metrics to avoid noise.
 
 ## Architecture
 
