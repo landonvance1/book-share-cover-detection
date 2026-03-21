@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import settings
 from app.engines.gliner_engine import GlinerNlpEngine
@@ -36,11 +37,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Book Cover Detection", version="0.1.0", lifespan=lifespan)
+Instrumentator(skip_paths=["/health"]).instrument(app).expose(app, endpoint="/metrics")
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    return HealthResponse(status="healthy", version="0.1.0")
+    status = "healthy" if analyzer is not None else "starting"
+    return HealthResponse(status=status, version="0.1.0")
 
 
 @app.post("/analyze", response_model=CoverAnalysisResponse)
