@@ -41,6 +41,7 @@ class Florence2OnnxEngine(OcrEngine):
         processor_name: str = "microsoft/Florence-2-base-ft",
         intra_op_num_threads: int | None = None,
     ) -> None:
+        t_init = time.perf_counter()
         onnx_dir = Path(model_path) / "onnx"
         suffix = f"_{quantization}" if quantization else ""
         threads = intra_op_num_threads if intra_op_num_threads is not None else settings.onnx_num_threads
@@ -50,18 +51,29 @@ class Florence2OnnxEngine(OcrEngine):
         opts.intra_op_num_threads = threads
         opts.inter_op_num_threads = 1
 
+        t = time.perf_counter()
         self._vision_encoder = ort.InferenceSession(
             str(onnx_dir / f"vision_encoder{suffix}.onnx"), opts
         )
+        logger.debug("Loaded vision_encoder", extra={"elapsed_ms": round((time.perf_counter() - t) * 1000, 1)})
+
+        t = time.perf_counter()
         self._embed_tokens = ort.InferenceSession(
             str(onnx_dir / f"embed_tokens{suffix}.onnx"), opts
         )
+        logger.debug("Loaded embed_tokens", extra={"elapsed_ms": round((time.perf_counter() - t) * 1000, 1)})
+
+        t = time.perf_counter()
         self._encoder = ort.InferenceSession(
             str(onnx_dir / f"encoder_model{suffix}.onnx"), opts
         )
+        logger.debug("Loaded encoder_model", extra={"elapsed_ms": round((time.perf_counter() - t) * 1000, 1)})
+
+        t = time.perf_counter()
         self._decoder = ort.InferenceSession(
             str(onnx_dir / f"decoder_model_merged{suffix}.onnx"), opts
         )
+        logger.debug("Loaded decoder_model_merged", extra={"elapsed_ms": round((time.perf_counter() - t) * 1000, 1)})
 
         self._processor = AutoProcessor.from_pretrained(
             processor_name, trust_remote_code=True, local_files_only=True
@@ -86,6 +98,11 @@ class Florence2OnnxEngine(OcrEngine):
         self._enc_kv_indices = [i for i, n in enumerate(kv_out_names) if ".encoder." in n]
         self._dec_kv_indices = [i for i, n in enumerate(kv_out_names) if ".encoder." not in n]
 
+        logger.info(
+            "Florence2 ONNX engine initialized",
+            extra={"model_path": model_path, "quantization": quantization, "duration_ms": round((time.perf_counter() - t_init) * 1000, 1)},
+        )
+
     def _extract_embedding_weights(self) -> np.ndarray:
         """Run embed_tokens in chunks to build a (vocab_size, embed_dim) weight matrix."""
         weights = np.empty((_VOCAB_SIZE, _EMBED_DIM), dtype=np.float32)
@@ -102,19 +119,18 @@ class Florence2OnnxEngine(OcrEngine):
         return await loop.run_in_executor(None, lambda: self._run_ocr(image))
 
     def _run_ocr(self, image: Image.Image) -> OcrResult:
-        timing = settings.onnx_log_timing
-        t0 = time.perf_counter() if timing else None
+        t0 = time.perf_counter()
         task = "<OCR_WITH_REGION>"
 
         inputs = self._processor(text=task, images=image, return_tensors="np")
-        t_processor = time.perf_counter() if timing else None
+        t_processor = time.perf_counter()
 
         # Stage 1: Vision encoding
         pixel_values = inputs["pixel_values"].astype(np.float32)
         image_features = self._vision_encoder.run(
             None, {"pixel_values": pixel_values}
         )[0]
-        t_vision = time.perf_counter() if timing else None
+        t_vision = time.perf_counter()
 
         # Stage 2: Text embedding (numpy indexing) + encoder
         input_ids = inputs["input_ids"].astype(np.int64)
@@ -129,11 +145,11 @@ class Florence2OnnxEngine(OcrEngine):
             "inputs_embeds": combined_embeds,
             "attention_mask": combined_mask,
         })[0]
-        t_encoder = time.perf_counter() if timing else None
+        t_encoder = time.perf_counter()
 
         # Stage 3: Greedy autoregressive decode
         generated_ids = self._greedy_decode(encoder_hidden, combined_mask)
-        t_decode = time.perf_counter() if timing else None
+        t_decode = time.perf_counter()
 
         # Stage 4: Post-process
         text = self._processor.batch_decode(
@@ -144,21 +160,20 @@ class Florence2OnnxEngine(OcrEngine):
         )
         result = _build_ocr_result(parsed[task])
 
-        if timing:
-            t_end = time.perf_counter()
-            num_tokens = len(generated_ids[0]) if generated_ids else 0
-            logger.info(
-                "ONNX timing — processor: %.1fms, vision_enc: %.1fms, "
-                "text_enc: %.1fms, decode: %.1fms (%d tokens), "
-                "postprocess: %.1fms, total: %.1fms",
-                (t_processor - t0) * 1000,
-                (t_vision - t_processor) * 1000,
-                (t_encoder - t_vision) * 1000,
-                (t_decode - t_encoder) * 1000,
-                num_tokens,
-                (t_end - t_decode) * 1000,
-                (t_end - t0) * 1000,
-            )
+        t_end = time.perf_counter()
+        num_tokens = len(generated_ids[0]) if generated_ids else 0
+        logger.debug(
+            "ONNX timing",
+            extra={
+                "processor_ms": round((t_processor - t0) * 1000, 1),
+                "vision_enc_ms": round((t_vision - t_processor) * 1000, 1),
+                "text_enc_ms": round((t_encoder - t_vision) * 1000, 1),
+                "decode_ms": round((t_decode - t_encoder) * 1000, 1),
+                "num_tokens": num_tokens,
+                "postprocess_ms": round((t_end - t_decode) * 1000, 1),
+                "total_ms": round((t_end - t0) * 1000, 1),
+            },
+        )
 
         return result
 

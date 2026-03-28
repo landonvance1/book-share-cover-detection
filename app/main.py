@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -6,8 +7,13 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import settings
 from app.engines.gliner_engine import GlinerNlpEngine
+from app.logging_config import setup_logging
 from app.models import CoverAnalysisResponse, HealthResponse
 from app.services.analyzer import CoverAnalyzer
+
+setup_logging()
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_FILE_SIZE = 4 * 1024 * 1024  # 4 MB
@@ -17,7 +23,11 @@ analyzer: CoverAnalyzer | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Re-apply after uvicorn's own logging.config.dictConfig call, which runs
+    # during server startup and reinstalls plain-text handlers on uvicorn loggers.
+    setup_logging()
     global analyzer
+    logger.info("Starting cover detection service", extra={"ocr_engine": settings.ocr_engine})
     if settings.ocr_engine == "onnx":
         from app.engines.florence2_onnx_engine import Florence2OnnxEngine
         ocr_engine = Florence2OnnxEngine(
@@ -32,6 +42,7 @@ async def lifespan(app: FastAPI):
         )
     nlp_engine = GlinerNlpEngine(revision=settings.gliner_model_revision)
     analyzer = CoverAnalyzer(ocr_engine, nlp_engine)
+    logger.info("Models loaded, service ready", extra={"ocr_engine": settings.ocr_engine})
     yield
     analyzer = None
 
@@ -49,6 +60,10 @@ async def health():
 @app.post("/analyze", response_model=CoverAnalysisResponse)
 async def analyze_cover(file: UploadFile = File(...)):
     if file.content_type not in ALLOWED_CONTENT_TYPES:
+        logger.warning(
+            "Invalid content type rejected",
+            extra={"content_type": file.content_type},
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Invalid content type: {file.content_type}. Accepted: JPEG, PNG, WebP",
@@ -57,6 +72,10 @@ async def analyze_cover(file: UploadFile = File(...)):
     image_bytes = await file.read()
 
     if len(image_bytes) > MAX_FILE_SIZE:
+        logger.warning(
+            "Oversized file rejected",
+            extra={"file_size_bytes": len(image_bytes), "max_bytes": MAX_FILE_SIZE},
+        )
         raise HTTPException(
             status_code=400,
             detail=f"File too large: {len(image_bytes)} bytes. Max: {MAX_FILE_SIZE} bytes",

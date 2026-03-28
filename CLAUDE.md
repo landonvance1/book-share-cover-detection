@@ -274,6 +274,23 @@ Key settings:
 - `ONNX_NUM_THREADS`: ONNX Runtime thread count (default: 4; tune to match physical cores available)
 - `GLINER_MODEL_REVISION`: Pinned GLiNER model revision to ensure reproducibility
 
+### Logging
+
+All log output is JSON-structured (via `python-json-logger`) with these fields per line: `timestamp`, `level`, `logger_name`, `message`, plus any extra context fields (e.g. `duration_ms`, `ocr_engine`, `error`).
+
+The `level` and `logger_name` fields are promoted as indexed labels by Alloy in the monitoring stack (see [book-share-monitoring#11](https://github.com/landonvance1/book-share-monitoring/issues/11)).
+
+Per-stage ONNX timing (processor, vision_enc, text_enc, decode, postprocess) is always emitted at `DEBUG` level. It is not visible at the default `INFO` level — no env var toggle is needed.
+
+### Metrics
+
+Three custom Prometheus histograms are exposed at `GET /metrics` for pipeline observability:
+- `cover_detection_ocr_duration_seconds`
+- `cover_detection_nlp_duration_seconds`
+- `cover_detection_total_duration_seconds`
+
+These complement the HTTP-level metrics provided by `prometheus-fastapi-instrumentator` and allow Grafana panels showing p50/p95/p99 per pipeline stage.
+
 ### Offline Deployment
 
 The Docker image is designed for airgapped deployments. All required models are baked into the image during build, and `HF_HUB_OFFLINE=1` is set to prevent runtime network calls. This is useful for:

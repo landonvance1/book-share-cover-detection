@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 
 from app.interfaces.nlp import NlpEngine
 from app.models import NlpAnalysis, OcrResult
+
+logger = logging.getLogger(__name__)
 
 
 def _region_height(region) -> float:
@@ -53,8 +57,11 @@ class GlinerNlpEngine(NlpEngine):
 
     def __init__(self, model_name: str = DEFAULT_MODEL, threshold: float = DEFAULT_THRESHOLD, revision: str | None = None):
         from gliner import GLiNER  # lazy import — gliner is heavy and optional at import time
+        t0 = time.perf_counter()
         self._model = GLiNER.from_pretrained(model_name, revision=revision)
         self._threshold = threshold
+        duration = time.perf_counter() - t0
+        logger.info("GLiNER model loaded", extra={"model": model_name, "duration_ms": round(duration * 1000, 1)})
 
     async def analyze(self, ocr_result: OcrResult) -> NlpAnalysis:
         regions = _regions_with_heights(ocr_result)

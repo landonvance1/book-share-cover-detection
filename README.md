@@ -112,9 +112,16 @@ Returns service health status for container orchestration. The `status` field is
 Exposes Prometheus metrics for monitoring and alerting.
 
 **Metrics included:**
-- HTTP request counts, latencies, and status codes per endpoint
+
+HTTP instrumentation (via `prometheus-fastapi-instrumentator`):
+- Request counts, latencies, and status codes per endpoint
 - Request/response sizes
 - Requests currently in progress
+
+Pipeline stage histograms:
+- `cover_detection_ocr_duration_seconds` — time spent in the OCR stage
+- `cover_detection_nlp_duration_seconds` — time spent in the NLP stage
+- `cover_detection_total_duration_seconds` — total analysis time (OCR + NLP)
 
 **Integrating with Prometheus** — add to your `prometheus.yml`:
 
@@ -243,6 +250,8 @@ Key settings:
 - `ONNX_PROCESSOR_NAME`: HuggingFace model name for the ONNX processor (default: `microsoft/Florence-2-base-ft`)
 - `ONNX_NUM_THREADS`: ONNX Runtime thread count (default: 4)
 
+Per-stage ONNX timing is always logged at `DEBUG` level. To enable it, set the log level to `DEBUG` (e.g. via `LOG_LEVEL=DEBUG` if you configure that) rather than using the removed `ONNX_LOG_TIMING` flag.
+
 #### Offline Deployment
 
 The Docker image bakes in all required models (`florence2`, `gliner`, and tokenizer dependencies) during build. Set `HF_HUB_OFFLINE=1` to prevent any runtime network calls—useful for airgapped or unreliable network environments. The Dockerfile does this by default.
@@ -304,6 +313,7 @@ pytest tests/integration/ -v
 ```
 app/
 ├── main.py              # FastAPI app and routes
+├── logging_config.py    # JSON structured logging setup
 ├── interfaces/
 │   ├── ocr.py           # OCR abstract base class
 │   └── nlp.py           # NLP abstract base class
