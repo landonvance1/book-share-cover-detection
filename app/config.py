@@ -44,11 +44,6 @@ class Settings(BaseSettings):
     # and significant slowdowns — see benchmark results in issue #12.
     onnx_num_threads: int = 4
 
-    # When true, logs per-stage timing for each ONNX inference call.
-    # Set ONNX_LOG_TIMING=true in the environment or .env to enable.
-    # Default is false to avoid overhead in production.
-    onnx_log_timing: bool = False
-
     # When true, serves the static test webapp at /test/.
     # Set ENABLE_TEST_APP=true in the environment or .env to enable.
     # Disabled by default — not intended for production use.
